@@ -10,10 +10,12 @@ export default function Hero() {
           <div className="text-center md:text-left">
             <h1 className="text-4xl font-bold tracking-tight text-gray-900 dark:text-white sm:text-6xl">
               Organize Events, <br className="hidden sm:inline" />
-              Effortlessly with <span className="text-indigo-600">EventPilot</span>
+              Effortlessly with{" "}
+              <span className="text-indigo-600">EventPilot</span>
             </h1>
             <p className="mt-6 text-lg leading-8 text-gray-600 dark:text-gray-400">
-              Manage your events with ease — from planning to ticketing to feedback. EventPilot is your complete event management platform.
+              Manage your events with ease — from planning to ticketing to
+              feedback. EventPilot is your complete event management platform.
             </p>
             <div className="mt-10 flex flex-col sm:flex-row items-center gap-4 justify-center md:justify-start">
               <Link
@@ -34,10 +36,12 @@ export default function Hero() {
           {/* Right Image */}
           <div className="relative w-full h-64 sm:h-80 md:h-96 lg:h-[28rem]">
             <Image
-              src="/event_img.jpeg" // Add this image in your public folder
-              alt="Event planning illustration"
-              fill
-              className="object-contain"
+              src="/event_img.jpeg"
+              alt="Event"
+              width={800}
+              height={600}
+              sizes="(max-width: 768px) 100vw, 50vw"
+              className="rounded-md object-cover"
               priority
             />
           </div>

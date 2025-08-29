@@ -1,27 +1,30 @@
-import type { Metadata } from "next";
+// app/layout.tsx
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import AuthProvider from "@/context/AuthContext";
+import { Toaster } from "react-hot-toast";
 
-// Configure Inter font with Tailwind CSS variable
+// Load Inter font with Tailwind CSS variable
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-inter",
   display: "swap",
 });
 
-// SEO & Metadata
+// --- SEO & Metadata ---
 export const metadata: Metadata = {
   title: {
     default: "Event Management",
     template: "%s | Event Management",
   },
   description: "A modern event management platform built with Next.js",
+  metadataBase: new URL("https://yourdomain.com"),
+  keywords: ["Next.js", "Event", "Management", "Booking", "Platform"],
   authors: [{ name: "Your Name", url: "https://yourwebsite.com" }],
   creator: "Your Name",
-  keywords: ["Next.js", "Event", "Management", "Booking", "Platform"],
-  metadataBase: new URL("https://yourdomain.com"), // replace with actual domain
   openGraph: {
     title: "Event Management",
     description: "Plan, book, and manage your events effortlessly.",
@@ -36,8 +39,11 @@ export const metadata: Metadata = {
     description: "Plan, book, and manage your events effortlessly.",
     creator: "@yourhandle",
   },
+};
+
+// --- Viewport settings (new as of Next.js 13.4+)
+export const viewport: Viewport = {
   themeColor: "#ffffff",
-  manifest: "/site.webmanifest",
 };
 
 export default function RootLayout({
@@ -48,11 +54,14 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} scroll-smooth`}>
       <body className="min-h-screen bg-white text-gray-900 antialiased">
-        <main className="flex flex-col min-h-screen">
-          <Navbar />
-          {children}
-          <Footer />
-        </main>
+        <AuthProvider>
+          <Toaster position="top-right" />
+          <main className="flex flex-col min-h-screen">
+            <Navbar />
+            <div className="flex-grow">{children}</div>
+            <Footer />
+          </main>
+        </AuthProvider>
       </body>
     </html>
   );
