@@ -1,4 +1,3 @@
-// src/app/user/dashboard/attendee/page.tsx
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -25,9 +24,7 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 dayjs.extend(relativeTime);
 
-/* -------------------------
-   Types (based on your API)
-   ------------------------- */
+
 interface EventItem {
   id: number;
   organizer: number;
@@ -63,9 +60,6 @@ interface UserDashboardResponse {
   archived?: EventItem[];
 }
 
-/* -------------------------
-   Simple LocalStorage cache
-   ------------------------- */
 const LS_KEY = "eventpilot_user_dashboard_v1";
 const REVALIDATE_MS = 2 * 60 * 1000; // 2 minutes
 const POLL_MS = 2 * 60 * 1000; // poll every 2 minutes
@@ -87,9 +81,7 @@ function safeLocalSet<T>(key: string, value: { data: T; ts: number }) {
   }
 }
 
-/* -------------------------
-   Small UI helpers
-   ------------------------- */
+
 function AvatarFallback({ title }: { title: string }) {
   // small fallback pill when image absent
   return (
@@ -111,9 +103,7 @@ function EmptyState({ title, subtitle }: { title: string; subtitle?: string }) {
   );
 }
 
-/* -------------------------
-   Event Card (tailwind only)
-   ------------------------- */
+
 function EventCard({ event, onOpen }: { event: EventItem; onOpen: (id: number) => void }) {
   const start = dayjs(event.start_time).local();
   const hasMap = Boolean(event.location_map_url);
@@ -314,7 +304,7 @@ export default function UserDashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-white dark:bg-black text-gray-900 dark:text-gray-100 mt-24 pt-8 pb-12">
+    <div className="min-h-screen bg-white dark:bg-black text-gray-900 dark:text-gray-100 pt-24 pb-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
