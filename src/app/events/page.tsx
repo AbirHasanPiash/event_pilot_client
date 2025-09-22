@@ -110,7 +110,6 @@ export default function EventsPage() {
 
   // Sync URL and load on filter/search/page changes
   useEffect(() => {
-    // Update URL without refreshing page
     const qs = buildQuery(page, dateFilter, debouncedSearch);
     router.replace(`/events?${qs}`);
     loadEvents(page, dateFilter, debouncedSearch);
@@ -133,28 +132,29 @@ export default function EventsPage() {
   // Pagination handlers
   const goNext = () => {
     if (nextUrl) {
-      // If API provided full next URL, try to extract page param
-      const url = new URL(nextUrl, typeof window !== "undefined" ? window.location.origin : undefined);
+      const url = new URL(
+        nextUrl,
+        typeof window !== "undefined" ? window.location.origin : undefined
+      );
       const p = Number(url.searchParams.get("page") || page + 1);
       setPage(p);
-    } else {
-      setPage((s) => s + 1);
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }
-    window.scrollTo({ top: 0, behavior: "smooth" });
   };
+
   const goPrev = () => {
     if (prevUrl) {
-      const url = new URL(prevUrl, typeof window !== "undefined" ? window.location.origin : undefined);
+      const url = new URL(
+        prevUrl,
+        typeof window !== "undefined" ? window.location.origin : undefined
+      );
       const p = Number(url.searchParams.get("page") || Math.max(1, page - 1));
       setPage(p);
-    } else {
-      setPage((s) => Math.max(1, s - 1));
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }
-    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   return (
-    // page background: white (light) / black (dark)
     <div className="min-h-screen bg-white dark:bg-black text-gray-900 dark:text-gray-100 pt-28 pb-16">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
@@ -164,13 +164,16 @@ export default function EventsPage() {
               Discover Events
             </h1>
             <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-              {resultSummary} • {debouncedSearch ? `Searching for "${debouncedSearch}"` : "Browse by filter or search"}
+              {resultSummary} •{" "}
+              {debouncedSearch
+                ? `Searching for "${debouncedSearch}"`
+                : "Browse by filter or search"}
             </p>
           </div>
 
           {/* Controls */}
           <div className="flex items-center gap-3 w-full sm:w-auto">
-            {/* Filters (pill group) */}
+            {/* Filters */}
             <div className="hidden sm:flex gap-2">
               {DATE_FILTERS.map((f) => {
                 const active = dateFilter === f.key;
@@ -187,7 +190,10 @@ export default function EventsPage() {
                     aria-pressed={active}
                     title={f.label}
                   >
-                    <Icon size={14} className={`${active ? "text-white" : "text-indigo-500"}`} />
+                    <Icon
+                      size={14}
+                      className={`${active ? "text-white" : "text-indigo-500"}`}
+                    />
                     <span>{f.label}</span>
                   </button>
                 );
@@ -196,7 +202,10 @@ export default function EventsPage() {
 
             {/* Search */}
             <div className="relative flex-1 sm:flex-none w-full sm:w-72">
-              <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
+              <Search
+                className="absolute left-3 top-2.5 text-gray-400"
+                size={18}
+              />
               <input
                 type="text"
                 placeholder="Search events, tags or venue..."
@@ -231,7 +240,7 @@ export default function EventsPage() {
           </div>
         </div>
 
-        {/* Grid + Sidebar layout (cards) */}
+        {/* Grid layout */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* Main list */}
           <div className="lg:col-span-3">
@@ -241,8 +250,12 @@ export default function EventsPage() {
               </div>
             ) : events.length === 0 ? (
               <div className="rounded-lg border border-dashed border-gray-200 dark:border-gray-800 p-8 text-center bg-white dark:bg-gray-900">
-                <p className="text-gray-600 dark:text-gray-400">No events match your query.</p>
-                <p className="mt-2 text-sm text-gray-500 dark:text-gray-500">Try clearing filters or searching different keywords.</p>
+                <p className="text-gray-600 dark:text-gray-400">
+                  No events match your query.
+                </p>
+                <p className="mt-2 text-sm text-gray-500 dark:text-gray-500">
+                  Try clearing filters or searching different keywords.
+                </p>
               </div>
             ) : (
               <div className="grid gap-6 sm:grid-cols-2">
@@ -261,7 +274,6 @@ export default function EventsPage() {
                         fill
                         className="object-cover group-hover:scale-105 transition-transform duration-300"
                       />
-                      {/* overlay badge */}
                       <div className="absolute left-3 top-3 px-2 py-1 rounded-md bg-black/60 text-white text-xs">
                         {event.category?.name ?? "General"}
                       </div>
@@ -270,7 +282,9 @@ export default function EventsPage() {
                     <div className="p-4 flex flex-col gap-3">
                       <div className="flex justify-between items-start gap-3">
                         <div className="min-w-0">
-                          <h3 className="text-lg font-semibold leading-snug truncate">{event.title}</h3>
+                          <h3 className="text-lg font-semibold leading-snug truncate">
+                            {event.title}
+                          </h3>
                           <p className="mt-1 text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
                             {event.description}
                           </p>
@@ -286,7 +300,10 @@ export default function EventsPage() {
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex flex-wrap gap-2">
                           {event.tags.slice(0, 4).map((t) => (
-                            <span key={t} className="px-2 py-0.5 text-xs rounded bg-indigo-50 text-indigo-700">
+                            <span
+                              key={t}
+                              className="px-2 py-0.5 text-xs rounded bg-indigo-50 text-indigo-700"
+                            >
                               #{t}
                             </span>
                           ))}
@@ -303,53 +320,59 @@ export default function EventsPage() {
             )}
 
             {/* Pagination */}
-            <div className="mt-8 flex items-center justify-between gap-4">
-              <div className="text-sm text-gray-600 dark:text-gray-400">
-                Showing page <span className="font-medium">{page}</span>
-                {count !== null && (
-                  <span className="text-gray-500"> — {count} total</span>
-                )}
-              </div>
+            {events.length > 0 && (
+              <div className="mt-8 flex items-center justify-between gap-4">
+                <div className="text-sm text-gray-600 dark:text-gray-400">
+                  Page <span className="font-medium">{page}</span> — showing{" "}
+                  <span className="font-medium">{events.length}</span> of{" "}
+                  <span className="font-medium">{count ?? "—"}</span> events
+                </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={goPrev}
-                  disabled={page <= 1 || loading}
-                  className="inline-flex items-center gap-2 px-3 py-2 rounded-md border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-sm disabled:opacity-50"
-                  aria-label="Previous page"
-                >
-                  <ChevronLeft size={16} /> Prev
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={goPrev}
+                    disabled={!prevUrl || loading}
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-md border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-sm disabled:opacity-50"
+                  >
+                    <ChevronLeft size={16} /> Prev
+                  </button>
 
-                <button
-                  onClick={goNext}
-                  disabled={events.length === 0 || loading}
-                  className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-indigo-600 text-white text-sm hover:bg-indigo-700 disabled:opacity-50"
-                  aria-label="Next page"
-                >
-                  Next <ChevronRight size={16} />
-                </button>
+                  <button
+                    onClick={goNext}
+                    disabled={!nextUrl || loading}
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-indigo-600 text-white text-sm hover:bg-indigo-700 disabled:opacity-50"
+                  >
+                    Next <ChevronRight size={16} />
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
-          {/* Right column: small insights / CTA */}
+          {/* Sidebar */}
           <aside className="hidden lg:block">
             <div className="sticky top-28 space-y-4">
               <div className="rounded-lg p-4 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 shadow-sm">
                 <h4 className="text-sm font-semibold">Refine results</h4>
                 <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                  Use filters and search to quickly find events. Try searching with city, tag or organizer.
+                  Use filters and search to quickly find events. Try searching
+                  with city, tag or organizer.
                 </p>
                 <div className="mt-3 flex flex-col gap-2">
                   <button
-                    onClick={() => { setDateFilter("ongoing"); setPage(1); }}
+                    onClick={() => {
+                      setDateFilter("ongoing");
+                      setPage(1);
+                    }}
                     className="text-left text-sm px-3 py-2 rounded-md border bg-indigo-50 text-indigo-700"
                   >
                     Ongoing events
                   </button>
                   <button
-                    onClick={() => { setDateFilter("upcoming"); setPage(1); }}
+                    onClick={() => {
+                      setDateFilter("upcoming");
+                      setPage(1);
+                    }}
                     className="text-left text-sm px-3 py-2 rounded-md border bg-white dark:bg-gray-800"
                   >
                     Upcoming events

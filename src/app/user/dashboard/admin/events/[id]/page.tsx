@@ -12,6 +12,8 @@ import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import ScheduleModal from "@/components/ScheduleModal";
+import ScheduleTimeline from "@/components/ScheduleTimeline";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -50,6 +52,50 @@ export default function EventDetailPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+
+  const handleScheduleSubmit = async (schedules: any[]) => {
+    // minimal client-side validation & normalization
+    const payload = schedules
+      .map((s) => {
+        const start = s.start_datetime
+          ? new Date(s.start_datetime).toISOString()
+          : null;
+        const end = s.end_datetime
+          ? new Date(s.end_datetime).toISOString()
+          : null;
+        return {
+          start_datetime: start,
+          end_datetime: end,
+          title: s.title?.trim() || "",
+          agenda: s.agenda?.trim() || "",
+        };
+      })
+      .filter((s) => s.start_datetime && s.title); // require start + title
+
+    if (payload.length === 0) {
+      toast.error(
+        "Please add at least one valid schedule with title and start time."
+      );
+      return;
+    }
+
+    const result = await safeApiFetch(
+      `/api/events/${event?.id}/schedules/bulk/`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ schedules: payload }),
+      }
+    );
+
+    if (result) {
+      toast.success("Schedules created successfully!");
+      // refresh schedules or event
+    } else {
+      toast.error("Failed to create schedules.");
+    }
+  };
 
   const fetchEvent = async () => {
     setLoading(true);
@@ -269,6 +315,26 @@ export default function EventDetailPage() {
           ))}
         </div>
       )}
+
+      {/* Schedules Button */}
+      <div>
+        <button
+          onClick={() => setShowScheduleModal(true)}
+          className="mt-4 px-4 py-2 text-sm border border-indigo-500 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-white/10 rounded-lg"
+        >
+          + Add Sub-Schedules
+        </button>
+      </div>
+
+      <ScheduleTimeline/>
+
+      <ScheduleModal
+        isOpen={showScheduleModal}
+        onClose={() => setShowScheduleModal(false)}
+        onSubmit={handleScheduleSubmit}
+        mainStart={event.start_time}
+        mainEnd={event.end_time}
+      />
 
       {/* Edit Modal */}
       <EventModal

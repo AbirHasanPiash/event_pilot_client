@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { useSafeApiFetch } from "@/lib/apiWrapper";
 import ConfirmModal from "@/components/ConfirmModal";
@@ -82,6 +82,13 @@ export default function AdminEventsPage() {
   const initialDateFilter = searchParams.get("date_filter") || "";
   const [dateFilter, setDateFilter] = useState(initialDateFilter);
 
+  const [count, setCount] = useState<number>(0);
+  const [nextUrl, setNextUrl] = useState<string | null>(null);
+  const [prevUrl, setPrevUrl] = useState<string | null>(null);
+
+  const initialPage = parseInt(searchParams.get("page") || "1", 10);
+  const [currentPage, setCurrentPage] = useState<number>(initialPage);
+
   const emptyEventData: EventFormData = {
     title: "",
     description: "",
@@ -110,19 +117,23 @@ export default function AdminEventsPage() {
 
   // Load events
   const loadEvents = useCallback(
-    async (query = "", dateFilter = "") => {
+    async (query = "", dateFilter = "", page = 1) => {
       setLoading(true);
 
       const params = new URLSearchParams();
       if (query) params.set("search", query);
       if (dateFilter) params.set("date_filter", dateFilter);
+      params.set("page", String(page));
 
       const data = await safeApiFetch<PaginatedResponse<Event>>(
         `/api/events/?${params.toString()}`
       );
 
-      if (data && Array.isArray(data.results)) {
+      if (data) {
         setEvents(data.results);
+        setCount(data.count);
+        setNextUrl(data.next);
+        setPrevUrl(data.previous);
       } else {
         setEvents([]);
       }
@@ -131,6 +142,47 @@ export default function AdminEventsPage() {
     },
     [safeApiFetch]
   );
+
+  // Initial load on mount
+useEffect(() => {
+  loadEvents(initialSearch, initialDateFilter, initialPage);
+}, []);
+
+// Debounced load on filter/page change
+useEffect(() => {
+  const delay = setTimeout(() => {
+    const params = new URLSearchParams(Array.from(searchParams.entries()));
+
+    if (searchTerm) params.set("search", searchTerm);
+    else params.delete("search");
+
+    if (dateFilter) params.set("date_filter", dateFilter);
+    else params.delete("date_filter");
+
+    if (currentPage !== 1) {
+      params.set("page", String(currentPage));
+    } else {
+      params.delete("page");
+    }
+
+    router.replace(`/user/dashboard/admin/events?${params.toString()}`);
+    loadEvents(searchTerm, dateFilter, currentPage);
+  }, 500);
+
+  return () => clearTimeout(delay);
+}, [searchTerm, dateFilter, currentPage, loadEvents, router]);
+
+
+  const goToPage = (newPage: number) => {
+    const params = new URLSearchParams(Array.from(searchParams.entries()));
+    if (searchTerm) params.set("search", searchTerm);
+    else params.delete("search");
+    if (dateFilter) params.set("date_filter", dateFilter);
+    else params.delete("date_filter");
+    params.set("page", String(newPage));
+    router.replace(`/user/dashboard/admin/events?${params.toString()}`);
+    setCurrentPage(newPage);
+  };
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -162,12 +214,6 @@ export default function AdminEventsPage() {
     router.replace(`/user/dashboard/admin/events?${params.toString()}`);
   };
 
-  useEffect(() => {
-    const delay = setTimeout(() => {
-      loadEvents(searchTerm, dateFilter);
-    }, 500);
-    return () => clearTimeout(delay);
-  }, [searchTerm, dateFilter, loadEvents]);
 
   // Handle Create / Update
   const handleFormSubmit = async (form: EventFormData) => {
@@ -367,6 +413,40 @@ export default function AdminEventsPage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {events.length > 0 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between mt-6 gap-3">
+          <span className="text-sm text-gray-600">
+            Page {currentPage} — Showing <b>{events.length}</b> of{" "}
+            <b>{count}</b> events
+          </span>
+          <div className="flex gap-2 w-full sm:w-auto justify-center">
+            <button
+              onClick={() => goToPage(Math.max(1, currentPage - 1))}
+              disabled={!prevUrl}
+              className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md font-medium transition w-full sm:w-auto ${
+                prevUrl
+                  ? "bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-white"
+                  : "opacity-50 cursor-not-allowed"
+              }`}
+            >
+              <ArrowLeft size={16} /> Prev
+            </button>
+            <button
+              onClick={() => goToPage(currentPage + 1)}
+              disabled={!nextUrl}
+              className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md font-medium transition w-full sm:w-auto ${
+                nextUrl
+                  ? "bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-white"
+                  : "opacity-50 cursor-not-allowed"
+              }`}
+            >
+              Next <ArrowRight size={16} />
+            </button>
+          </div>
         </div>
       )}
 

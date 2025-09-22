@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Pencil, Trash2, ArrowLeft, ArrowRight, Search } from "lucide-react";
 import { toast } from "react-hot-toast";
@@ -29,16 +29,15 @@ export default function AdminUsersPage() {
   const searchParams = useSearchParams();
   const safeApiFetch = useSafeApiFetch();
 
-  const initialSearch = searchParams.get("search") || "";
-  const initialPage = parseInt(searchParams.get("page") || "1", 10);
-
   const [users, setUsers] = useState<UserItem[]>([]);
-  const [count, setCount] = useState<number>(0);
+  const [count, setCount] = useState(0);
   const [nextUrl, setNextUrl] = useState<string | null>(null);
   const [prevUrl, setPrevUrl] = useState<string | null>(null);
 
-  const [searchTerm, setSearchTerm] = useState(initialSearch);
-  const [currentPage, setCurrentPage] = useState<number>(initialPage);
+  const [searchTerm, setSearchTerm] = useState(searchParams.get("search") || "");
+  const [currentPage, setCurrentPage] = useState(
+    parseInt(searchParams.get("page") || "1", 10)
+  );
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -50,90 +49,68 @@ export default function AdminUsersPage() {
   const [deletingUser, setDeletingUser] = useState<UserItem | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  // Load users
-  const loadUsers = useCallback(
-    async (query = "", page = 1) => {
-      setLoading(true);
-      const encoded = `/api/users/?search=${encodeURIComponent(
-        query
-      )}&page=${page}`;
-      const data = await safeApiFetch<PaginatedResponse<UserItem>>(encoded);
-      if (data) {
-        setUsers(data.results);
-        setCount(data.count);
-        setNextUrl(data.next);
-        setPrevUrl(data.previous);
-      }
-      setLoading(false);
-    },
-    [safeApiFetch]
-  );
+  // Utility: update URL params
+  const updateUrl = (newSearch: string, newPage: number) => {
+    const params = new URLSearchParams();
+    if (newSearch) params.set("search", newSearch);
+    params.set("page", String(newPage));
+    router.replace(`/user/dashboard/admin/users?${params.toString()}`);
+  };
 
-  // Debounced search
+  // Fetch users
+  const loadUsers = async (query: string, page: number) => {
+    setLoading(true);
+    const url = `/api/users/?search=${encodeURIComponent(query)}&page=${page}`;
+    const data = await safeApiFetch<PaginatedResponse<UserItem>>(url);
+    if (data) {
+      setUsers(data.results);
+      setCount(data.count);
+      setNextUrl(data.next);
+      setPrevUrl(data.previous);
+    }
+    setLoading(false);
+  };
+
+  // Sync search + page changes
   useEffect(() => {
-    const t = setTimeout(() => {
+    const timeout = setTimeout(() => {
       setCurrentPage(1);
-      const params = new URLSearchParams(Array.from(searchParams.entries()));
-      if (searchTerm) params.set("search", searchTerm);
-      else params.delete("search");
-      params.set("page", "1");
-      router.replace(`/user/dashboard/admin/users?${params.toString()}`);
+      updateUrl(searchTerm, 1);
       loadUsers(searchTerm, 1);
     }, 450);
-
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => clearTimeout(timeout);
   }, [searchTerm]);
 
-  // When page changes
   useEffect(() => {
     loadUsers(searchTerm, currentPage);
-  }, [currentPage, loadUsers, searchTerm]);
+  }, [currentPage]);
 
   // Initial load
   useEffect(() => {
-    loadUsers(initialSearch, initialPage);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    loadUsers(searchTerm, currentPage);
   }, []);
 
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setSearchTerm(value);
-    const params = new URLSearchParams(Array.from(searchParams.entries()));
-    if (value) params.set("search", value);
-    else params.delete("search");
-    params.set("page", "1");
-    router.replace(`/user/dashboard/admin/users?${params.toString()}`);
-  };
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) =>
+    setSearchTerm(e.target.value);
 
   const openUpdateModal = (user: UserItem) => {
     setEditingUser(user);
     setShowUpdateModal(true);
   };
 
-  const handleRoleUpdate = async (payload: {
-    id: number;
-    role: string | null;
-  }) => {
+  const handleRoleUpdate = async ({ id, role }: { id: number; role: string | null }) => {
     setSubmitting(true);
     try {
-      const result = await safeApiFetch(`/api/users/${payload.id}/set_role/`, {
+      const result = await safeApiFetch(`/api/users/${id}/set_role/`, {
         method: "PATCH",
-        body: JSON.stringify({ role: payload.role }),
+        body: JSON.stringify({ role }),
       });
-
       if (result) {
         toast.success("User role updated successfully!");
+        setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, role } : u)));
         setShowUpdateModal(false);
         setEditingUser(null);
-        setUsers((prev) =>
-          prev.map((u) =>
-            u.id === payload.id ? { ...u, role: payload.role } : u
-          )
-        );
-      } else {
-        toast.error("Failed to update role.");
-      }
+      } else toast.error("Failed to update role.");
     } catch {
       toast.error("An error occurred while updating role.");
     } finally {
@@ -158,9 +135,7 @@ export default function AdminUsersPage() {
         setUsers((prev) => prev.filter((u) => u.id !== deletingUser.id));
         setShowDeleteModal(false);
         setDeletingUser(null);
-      } else {
-        toast.error("Failed to delete user.");
-      }
+      } else toast.error("Failed to delete user.");
     } catch {
       toast.error("An error occurred while deleting user.");
     } finally {
@@ -168,18 +143,13 @@ export default function AdminUsersPage() {
     }
   };
 
-  const goToPage = (newPage: number) => {
-    const params = new URLSearchParams(Array.from(searchParams.entries()));
-    if (searchTerm) params.set("search", searchTerm);
-    else params.delete("search");
-    params.set("page", String(newPage));
-    router.replace(`/user/dashboard/admin/users?${params.toString()}`);
-    setCurrentPage(newPage);
+  const goToPage = (page: number) => {
+    setCurrentPage(page);
+    updateUrl(searchTerm, page);
   };
 
-  const navigateToDetails = (id: number) => {
+  const navigateToDetails = (id: number) =>
     router.push(`/user/dashboard/admin/users/${id}`);
-  };
 
   return (
     <div className="max-w-5xl mx-auto p-4 sm:p-6 space-y-6">
@@ -211,7 +181,7 @@ export default function AdminUsersPage() {
         <div className="py-12 text-center text-gray-500">No users found.</div>
       ) : (
         <>
-          {/* Responsive Table */}
+          {/* Desktop Table */}
           <div className="hidden md:block overflow-x-auto rounded-lg shadow-sm">
             <table className="min-w-full text-sm">
               <thead className="bg-gray-100 dark:bg-gray-800">
@@ -258,11 +228,7 @@ export default function AdminUsersPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <span
-                        className={
-                          u.is_active ? "text-green-600" : "text-red-600"
-                        }
-                      >
+                      <span className={u.is_active ? "text-green-600" : "text-red-600"}>
                         {u.is_active ? "Active" : "Inactive"}
                       </span>
                     </td>
@@ -294,13 +260,12 @@ export default function AdminUsersPage() {
             </table>
           </div>
 
-          {/* Mobile Card View */}
+          {/* Mobile Cards */}
           <div className="grid gap-4 md:hidden">
             {users.map((u) => (
               <div
                 key={u.id}
-                className="rounded-lg border border-gray-200 dark:border-gray-700 p-4 bg-white 
-                dark:bg-gray-900 shadow-sm hover:shadow-md transition"
+                className="rounded-lg border border-gray-200 dark:border-gray-700 p-4 bg-white dark:bg-gray-900 shadow-sm hover:shadow-md transition"
               >
                 <div className="flex justify-between items-center">
                   <h3 className="font-medium">
@@ -324,29 +289,21 @@ export default function AdminUsersPage() {
                   </span>
                 </div>
                 <div className="mt-2 text-sm">
-                  <span
-                    className={u.is_active ? "text-green-600" : "text-red-600"}
-                  >
+                  <span className={u.is_active ? "text-green-600" : "text-red-600"}>
                     {u.is_active ? "Active" : "Inactive"}
                   </span>
                 </div>
                 <div className="mt-3 flex gap-2">
                   {!u.is_active && (
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openDeleteModal(u);
-                      }}
+                      onClick={() => openDeleteModal(u)}
                       className="flex-1 px-3 py-1 rounded-md border border-red-500 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 text-sm"
                     >
                       Delete
                     </button>
                   )}
                   <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openUpdateModal(u);
-                    }}
+                    onClick={() => openUpdateModal(u)}
                     className="flex-1 px-3 py-1 rounded-md border border-indigo-500 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-sm"
                   >
                     Edit

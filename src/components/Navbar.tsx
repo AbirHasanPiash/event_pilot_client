@@ -8,7 +8,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import { Button } from "./ui/button"; // optional: not used for theme toggle in this file
 
 const navLinks = [
   { name: "Home", href: "/" },
@@ -51,7 +50,7 @@ function ThemeToggle() {
         onClick={() => setOpen((v) => !v)}
         disabled={!mounted}
         className="relative w-10 h-10 rounded-2xl flex items-center justify-center border-0 bg-transparent shadow-none
-                   focus:outline-none dark:text-white focus-visible:ring-2 focus-visible:ring-indigo-500"
+                   focus:outline-none hover:text-yellow-500 hover:scale-105 dark:hover:text-yellow-500 dark:hover:scale-105 dark:text-white focus-visible:ring-2 focus-visible:ring-indigo-500"
         aria-label="Toggle theme"
       >
         <span className="sr-only">Toggle theme</span>
@@ -125,7 +124,6 @@ export default function Navbar() {
   const dropdownRef = useRef<HTMLDivElement | null>(null);
   const router = useRouter();
 
-  const toggleMenu = () => setIsOpen((v) => !v);
   const toggleDropdown = () => setDropdownOpen((p) => !p);
 
   const handleDashboardRedirect = () => {
@@ -183,7 +181,7 @@ export default function Navbar() {
               <div className="hidden md:flex gap-3 text-sm">
                 <Link
                   href="/auth/login"
-                  className="px-4 py-1 font-medium text-gray-700 dark:text-gray-200 hover:text-indigo-600 transition
+                  className="px-4 py-1 font-medium dark:text-white hover:text-indigo-600 dark:hover:text-indigo-600 transition
                              focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded-lg"
                 >
                   Login

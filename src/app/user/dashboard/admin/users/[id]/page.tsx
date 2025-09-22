@@ -144,7 +144,7 @@ export default function UserDetailsPage() {
                   ? "bg-red-100 text-red-700 dark:bg-red-900/30"
                   : user.role === "organizer"
                   ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/20"
-                  : "bg-gray-100 text-gray-700 dark:bg-gray-800"
+                  : "bg-gray-100 dark:bg-gray-800"
               }`}
             >
               {user.role ?? "—"}

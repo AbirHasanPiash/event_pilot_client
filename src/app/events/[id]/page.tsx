@@ -20,6 +20,7 @@ import {
 import { useSafeApiFetch } from "@/lib/apiWrapper";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { toast } from "react-hot-toast";
+import ScheduleTimeline from "@/components/ScheduleTimeline";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -197,6 +198,8 @@ export default function EventDetailsPage() {
               </a>
             </div>
           )}
+          {/* Schedule Timeline */}
+          <ScheduleTimeline/>
         </div>
 
         {/* Sidebar */}

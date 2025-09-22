@@ -10,6 +10,7 @@ import {
   Users,
   Calendar,
   Folder,
+  FileCheck2,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import LoadingSpinner from "@/components/LoadingSpinner";
@@ -31,6 +32,8 @@ export default function AdminDashboardLayout({
     { name: "Users", href: "/user/dashboard/admin/users", icon: Users },
     { name: "Events", href: "/user/dashboard/admin/events", icon: Calendar },
     { name: "Categories", href: "/user/dashboard/admin/categories", icon: Folder },
+    { name: "Organizer Requests", href: "/user/dashboard/admin/organizer-requests", icon: FileCheck2 },
+
   ];
 
   // Mark as hydrated after first client render
