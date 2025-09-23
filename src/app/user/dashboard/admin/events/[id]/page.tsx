@@ -14,32 +14,11 @@ import timezone from "dayjs/plugin/timezone";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import ScheduleModal from "@/components/ScheduleModal";
 import ScheduleTimeline from "@/components/ScheduleTimeline";
+import { Event } from "@/types/events";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
-interface Event {
-  id: number;
-  organizer: number;
-  organizer_name: string;
-  title: string;
-  description: string;
-  category: { id: number; name: string; description: string } | null;
-  tags: string[];
-  image: string | null;
-  start_time: string;
-  end_time: string;
-  venue: string;
-  location_map_url: string;
-  visibility: string;
-  status: string;
-  capacity: number;
-  attending_count: number;
-  interested_count: number;
-  allow_waitlist: boolean;
-  created_at: string;
-  updated_at: string;
-}
 
 interface ScheduleInput {
   start_datetime?: string | null;
@@ -48,22 +27,25 @@ interface ScheduleInput {
   agenda?: string;
 }
 
-interface EventFormData {
+// Unified AdminEventForm type
+export interface AdminEventForm {
+  id?: number | null;
   title: string;
   description: string;
-  category?: { id: number; name: string; description: string } | null;
+  category?: { id: number; name?: string; description?: string } | null;
   tags: string[];
   image?: File | string | null;
-  start_time?: string;
-  end_time?: string;
+  start_time?: string | null;
+  end_time?: string | null;
   venue: string;
   location_map_url: string;
   visibility: string;
   status: string;
-  capacity: number;
+  capacity: number | null;
   allow_waitlist: boolean;
 }
 
+// -------------------- Component --------------------
 export default function EventDetailPage() {
   const { id } = useParams();
   const router = useRouter();
@@ -77,48 +59,7 @@ export default function EventDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
 
-  const handleScheduleSubmit = async (schedules: ScheduleInput[]) => {
-    const payload = schedules
-      .map((s) => {
-        const start = s.start_datetime
-          ? new Date(s.start_datetime).toISOString()
-          : null;
-        const end = s.end_datetime
-          ? new Date(s.end_datetime).toISOString()
-          : null;
-        return {
-          start_datetime: start,
-          end_datetime: end,
-          title: s.title?.trim() || "",
-          agenda: s.agenda?.trim() || "",
-        };
-      })
-      .filter((s) => s.start_datetime && s.title);
-
-    if (payload.length === 0) {
-      toast.error(
-        "Please add at least one valid schedule with title and start time."
-      );
-      return;
-    }
-
-    const result = await safeApiFetch(
-      `/api/events/${event?.id}/schedules/bulk/`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ schedules: payload }),
-      }
-    );
-
-    if (result) {
-      toast.success("Schedules created successfully!");
-      // refresh schedules or event
-    } else {
-      toast.error("Failed to create schedules.");
-    }
-  };
-
+  // -------------------- Fetch Event --------------------
   const fetchEvent = useCallback(async () => {
     setLoading(true);
     const data = await safeApiFetch<Event>(`/api/events/${id}/`);
@@ -132,36 +73,34 @@ export default function EventDetailPage() {
   }, [fetchEvent]);
 
   const memoizedInitialData = useMemo(() => {
-    return event
-      ? {
-          ...event,
-          image: null,
-          existingImage: event?.image || null,
-        }
-      : {};
+    if (!event) return {};
+    return {
+      ...event,
+      image: null,
+      existingImage: event.image || null,
+      category_id: event.category?.id || null,
+    };
   }, [event]);
 
-  const handleUpdate = async (form: EventFormData) => {
+  // -------------------- Update Event --------------------
+  const handleUpdate = async (form: AdminEventForm) => {
     if (!event) return;
     setSubmitting(true);
 
     const formData = new FormData();
     formData.append("title", form.title);
     formData.append("description", form.description);
-    if (form.category?.id) {
+    if (form.category?.id)
       formData.append("category_id", String(form.category.id));
-    }
     formData.append("tags", JSON.stringify(form.tags));
-    if (form.image instanceof File) {
-      formData.append("image", form.image);
-    }
+    if (form.image instanceof File) formData.append("image", form.image);
     if (form.start_time) formData.append("start_time", form.start_time);
     if (form.end_time) formData.append("end_time", form.end_time);
     formData.append("venue", form.venue);
     formData.append("location_map_url", form.location_map_url);
     formData.append("visibility", form.visibility);
     formData.append("status", form.status);
-    formData.append("capacity", String(form.capacity));
+    formData.append("capacity", String(form.capacity ?? 0));
     formData.append("allow_waitlist", String(form.allow_waitlist));
 
     const result = await safeApiFetch(`/api/events/${event.id}/`, {
@@ -179,6 +118,7 @@ export default function EventDetailPage() {
     setSubmitting(false);
   };
 
+  // -------------------- Delete Event --------------------
   const handleDelete = async () => {
     if (!event) return;
     const result = await safeApiFetch(`/api/events/${event.id}/`, {
@@ -190,10 +130,46 @@ export default function EventDetailPage() {
     }
   };
 
-  if (loading || !event) {
-    return <LoadingSpinner />;
-  }
+  // -------------------- Add Schedules --------------------
+  const handleScheduleSubmit = async (schedules: ScheduleInput[]) => {
+    if (!event) return;
 
+    const payload = schedules
+      .map((s) => ({
+        start_datetime: s.start_datetime
+          ? new Date(s.start_datetime).toISOString()
+          : null,
+        end_datetime: s.end_datetime
+          ? new Date(s.end_datetime).toISOString()
+          : null,
+        title: s.title?.trim() || "",
+        agenda: s.agenda?.trim() || "",
+      }))
+      .filter((s) => s.start_datetime && s.title);
+
+    if (payload.length === 0) {
+      toast.error(
+        "Please add at least one valid schedule with title and start time."
+      );
+      return;
+    }
+
+    const result = await safeApiFetch(
+      `/api/events/${event.id}/schedules/bulk/`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ schedules: payload }),
+      }
+    );
+
+    if (result) toast.success("Schedules created successfully!");
+    else toast.error("Failed to create schedules.");
+  };
+
+  if (loading || !event) return <LoadingSpinner />;
+
+  // -------------------- JSX --------------------
   return (
     <div className="max-w-6xl mx-auto p-4 md:p-6 space-y-6">
       {/* Header */}
@@ -215,13 +191,12 @@ export default function EventDetailPage() {
         </div>
       </div>
 
-      {/* Layout: Image + Details */}
+      {/* Image + Details */}
       <div className="grid md:grid-cols-3 gap-6">
-        {/* Image */}
         <div className="relative w-full h-48 md:h-56 rounded-lg overflow-hidden border border-gray-200 dark:border-white/10 shadow">
           <Image
             src={
-              event.image && event.image.trim() !== ""
+              event.image && event.image.trim()
                 ? event.image
                 : "/placeholder.jpeg"
             }
@@ -231,7 +206,6 @@ export default function EventDetailPage() {
           />
         </div>
 
-        {/* Info */}
         <div className="md:col-span-2 space-y-4">
           <div className="flex flex-wrap gap-2">
             {event.category && (
@@ -337,7 +311,7 @@ export default function EventDetailPage() {
         </div>
       )}
 
-      {/* Schedules Button */}
+      {/* Schedules */}
       <div>
         <button
           onClick={() => setShowScheduleModal(true)}
@@ -357,7 +331,6 @@ export default function EventDetailPage() {
         mainEnd={event.end_time}
       />
 
-      {/* Edit Modal */}
       <EventModal
         isOpen={showEditModal}
         onClose={() => setShowEditModal(false)}
@@ -366,7 +339,6 @@ export default function EventDetailPage() {
         loading={submitting}
       />
 
-      {/* Delete Confirm */}
       <ConfirmModal
         isOpen={showDeleteConfirm}
         title="Delete Event?"

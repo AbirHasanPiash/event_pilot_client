@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import UpdateRoleModal from "@/components/UpdateRoleModal";
 import ConfirmModal from "@/components/ConfirmModal";
@@ -31,7 +31,7 @@ export default function UserDetailsPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Fetch user details
-  const fetchUser = async () => {
+  const fetchUser = useCallback(async () => {
     setLoading(true);
     const data = await safeApiFetch<UserItem>(`/api/users/${id}/`);
     if (data) {
@@ -41,14 +41,17 @@ export default function UserDetailsPage() {
       router.push("/user/dashboard/admin/users");
     }
     setLoading(false);
-  };
+  }, [id, safeApiFetch, router]);
 
   useEffect(() => {
     fetchUser();
-  }, [id]);
+  }, [fetchUser]);
 
   // Handle role update
-  const handleRoleUpdate = async (payload: { id: number; role: string | null }) => {
+  const handleRoleUpdate = async (payload: {
+    id: number;
+    role: string | null;
+  }) => {
     setSubmitting(true);
     try {
       const result = await safeApiFetch(`/api/users/${payload.id}/set_role/`, {

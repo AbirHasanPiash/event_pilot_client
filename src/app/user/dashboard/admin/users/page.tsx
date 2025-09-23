@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Pencil, Trash2, ArrowLeft, ArrowRight, Search } from "lucide-react";
 import { toast } from "react-hot-toast";
@@ -8,6 +8,8 @@ import { useSafeApiFetch } from "@/lib/apiWrapper";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import UpdateRoleModal from "@/components/UpdateRoleModal";
 import ConfirmModal from "@/components/ConfirmModal";
+import type { UserItem } from "@/types/users";
+
 
 interface PaginatedResponse<T> {
   count: number;
@@ -16,13 +18,6 @@ interface PaginatedResponse<T> {
   results: T[];
 }
 
-interface UserItem {
-  id: number;
-  first_name: string;
-  last_name: string;
-  role: string | null;
-  is_active: boolean;
-}
 
 export default function AdminUsersPage() {
   const router = useRouter();
@@ -34,7 +29,9 @@ export default function AdminUsersPage() {
   const [nextUrl, setNextUrl] = useState<string | null>(null);
   const [prevUrl, setPrevUrl] = useState<string | null>(null);
 
-  const [searchTerm, setSearchTerm] = useState(searchParams.get("search") || "");
+  const [searchTerm, setSearchTerm] = useState(
+    searchParams.get("search") || ""
+  );
   const [currentPage, setCurrentPage] = useState(
     parseInt(searchParams.get("page") || "1", 10)
   );
@@ -50,26 +47,34 @@ export default function AdminUsersPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Utility: update URL params
-  const updateUrl = (newSearch: string, newPage: number) => {
-    const params = new URLSearchParams();
-    if (newSearch) params.set("search", newSearch);
-    params.set("page", String(newPage));
-    router.replace(`/user/dashboard/admin/users?${params.toString()}`);
-  };
+  const updateUrl = useCallback(
+    (newSearch: string, newPage: number) => {
+      const params = new URLSearchParams();
+      if (newSearch) params.set("search", newSearch);
+      params.set("page", String(newPage));
+      router.replace(`/user/dashboard/admin/users?${params.toString()}`);
+    },
+    [router]
+  );
 
   // Fetch users
-  const loadUsers = async (query: string, page: number) => {
-    setLoading(true);
-    const url = `/api/users/?search=${encodeURIComponent(query)}&page=${page}`;
-    const data = await safeApiFetch<PaginatedResponse<UserItem>>(url);
-    if (data) {
-      setUsers(data.results);
-      setCount(data.count);
-      setNextUrl(data.next);
-      setPrevUrl(data.previous);
-    }
-    setLoading(false);
-  };
+  const loadUsers = useCallback(
+    async (query: string, page: number) => {
+      setLoading(true);
+      const url = `/api/users/?search=${encodeURIComponent(
+        query
+      )}&page=${page}`;
+      const data = await safeApiFetch<PaginatedResponse<UserItem>>(url);
+      if (data) {
+        setUsers(data.results);
+        setCount(data.count);
+        setNextUrl(data.next);
+        setPrevUrl(data.previous);
+      }
+      setLoading(false);
+    },
+    [safeApiFetch]
+  );
 
   // Sync search + page changes
   useEffect(() => {
@@ -79,16 +84,16 @@ export default function AdminUsersPage() {
       loadUsers(searchTerm, 1);
     }, 450);
     return () => clearTimeout(timeout);
-  }, [searchTerm]);
+  }, [searchTerm, updateUrl, loadUsers]);
 
   useEffect(() => {
     loadUsers(searchTerm, currentPage);
-  }, [currentPage]);
+  }, [currentPage, searchTerm, loadUsers]);
 
   // Initial load
   useEffect(() => {
     loadUsers(searchTerm, currentPage);
-  }, []);
+  }, [searchTerm, currentPage, loadUsers]);
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) =>
     setSearchTerm(e.target.value);
@@ -98,7 +103,13 @@ export default function AdminUsersPage() {
     setShowUpdateModal(true);
   };
 
-  const handleRoleUpdate = async ({ id, role }: { id: number; role: string | null }) => {
+  const handleRoleUpdate = async ({
+    id,
+    role,
+  }: {
+    id: number;
+    role: string | null;
+  }) => {
     setSubmitting(true);
     try {
       const result = await safeApiFetch(`/api/users/${id}/set_role/`, {
@@ -228,7 +239,11 @@ export default function AdminUsersPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <span className={u.is_active ? "text-green-600" : "text-red-600"}>
+                      <span
+                        className={
+                          u.is_active ? "text-green-600" : "text-red-600"
+                        }
+                      >
                         {u.is_active ? "Active" : "Inactive"}
                       </span>
                     </td>
@@ -289,7 +304,9 @@ export default function AdminUsersPage() {
                   </span>
                 </div>
                 <div className="mt-2 text-sm">
-                  <span className={u.is_active ? "text-green-600" : "text-red-600"}>
+                  <span
+                    className={u.is_active ? "text-green-600" : "text-red-600"}
+                  >
                     {u.is_active ? "Active" : "Inactive"}
                   </span>
                 </div>
@@ -352,7 +369,7 @@ export default function AdminUsersPage() {
           setEditingUser(null);
         }}
         onSubmit={handleRoleUpdate}
-        user={editingUser ?? undefined}
+        user={editingUser}
         loading={submitting}
       />
 

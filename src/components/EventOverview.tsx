@@ -43,10 +43,12 @@ export default function EventOverview() {
 
   // Fetch with sessionStorage cache
   useEffect(() => {
-    const cached = sessionStorage.getItem("event_overview");
-    if (cached) {
-      setData(JSON.parse(cached));
-      setLoading(false);
+    if (typeof window !== "undefined") {
+      const cached = sessionStorage.getItem("event_overview");
+      if (cached) {
+        setData(JSON.parse(cached));
+        setLoading(false);
+      }
     }
 
     const fetchData = async () => {
@@ -54,7 +56,9 @@ export default function EventOverview() {
         const response = await safeApiFetch<OverviewResponse>("/api/overview/");
         if (response) {
           setData(response);
-          sessionStorage.setItem("event_overview", JSON.stringify(response));
+          if (typeof window !== "undefined") {
+            sessionStorage.setItem("event_overview", JSON.stringify(response));
+          }
         }
       } finally {
         setLoading(false);
@@ -98,7 +102,9 @@ export default function EventOverview() {
           </h2>
           <p className="mt-6 max-w-2xl mx-auto text-lg text-gray-600 dark:text-gray-400">
             <span className="text-indigo-600 font-bold">Event</span>
-            <span className="text-gray-900 font-bold dark:text-white">Pilot </span>
+            <span className="text-gray-900 font-bold dark:text-white">
+              Pilot{" "}
+            </span>
             powers memorable experiences with{" "}
             <span className="font-semibold text-gray-900 dark:text-white">
               thousands of events

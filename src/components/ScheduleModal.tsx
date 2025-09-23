@@ -19,7 +19,6 @@ type Schedule = {
   errors?: { start?: string; end?: string };
 };
 
-
 export default function ScheduleModal({
   isOpen,
   onClose,
@@ -39,7 +38,9 @@ export default function ScheduleModal({
     if (initialSchedules && initialSchedules.length > 0) {
       setSchedules(initialSchedules.map((s) => ({ ...s })));
     } else {
-      setSchedules([{ start_datetime: "", end_datetime: "", title: "", agenda: "" }]);
+      setSchedules([
+        { start_datetime: "", end_datetime: "", title: "", agenda: "" },
+      ]);
     }
   }, [initialSchedules, isOpen]);
 
@@ -54,10 +55,16 @@ export default function ScheduleModal({
     setSchedules(schedules.filter((_, i) => i !== index));
   };
 
-  const handleChange = (index: number, field: keyof Schedule, value: string) => {
-    const newSchedules = [...schedules];
-    (newSchedules[index] as any)[field] = value;
-    setSchedules(newSchedules);
+  const handleChange = (
+    index: number,
+    field: keyof Schedule,
+    value: string
+  ) => {
+    setSchedules((prev) =>
+      prev.map((schedule, i) =>
+        i === index ? { ...schedule, [field]: value } : schedule
+      )
+    );
   };
 
   const validateSchedules = (): boolean => {
@@ -99,7 +106,9 @@ export default function ScheduleModal({
     setLoading(true);
     await onSubmit(schedules);
     setLoading(false);
-    setSchedules([{ start_datetime: "", end_datetime: "", title: "", agenda: "" }]);
+    setSchedules([
+      { start_datetime: "", end_datetime: "", title: "", agenda: "" },
+    ]);
     onClose();
   };
 
@@ -112,7 +121,10 @@ export default function ScheduleModal({
 
         <div className="space-y-6">
           {schedules.map((schedule, index) => (
-            <div key={index} className="p-4 border rounded-lg dark:border-gray-700 space-y-3">
+            <div
+              key={index}
+              className="p-4 border rounded-lg dark:border-gray-700 space-y-3"
+            >
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Start */}
                 <div>
@@ -126,7 +138,9 @@ export default function ScheduleModal({
                     className="w-full px-3 py-2 border rounded dark:bg-gray-800 border-gray-300 dark:border-gray-600"
                   />
                   {schedule.errors?.start && (
-                    <p className="text-xs text-red-500 mt-1">{schedule.errors.start}</p>
+                    <p className="text-xs text-red-500 mt-1">
+                      {schedule.errors.start}
+                    </p>
                   )}
                 </div>
 
@@ -142,7 +156,9 @@ export default function ScheduleModal({
                     className="w-full px-3 py-2 border rounded dark:bg-gray-800 border-gray-300 dark:border-gray-600"
                   />
                   {schedule.errors?.end && (
-                    <p className="text-xs text-red-500 mt-1">{schedule.errors.end}</p>
+                    <p className="text-xs text-red-500 mt-1">
+                      {schedule.errors.end}
+                    </p>
                   )}
                 </div>
               </div>
@@ -164,7 +180,9 @@ export default function ScheduleModal({
                 <label className="block mb-1 font-medium">Agenda</label>
                 <textarea
                   value={schedule.agenda}
-                  onChange={(e) => handleChange(index, "agenda", e.target.value)}
+                  onChange={(e) =>
+                    handleChange(index, "agenda", e.target.value)
+                  }
                   className="w-full px-3 py-2 border rounded dark:bg-gray-800 border-gray-300 dark:border-gray-600"
                   placeholder="Session agenda..."
                   rows={2}

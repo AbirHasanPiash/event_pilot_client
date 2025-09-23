@@ -14,32 +14,11 @@ import timezone from "dayjs/plugin/timezone";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import ScheduleModal from "@/components/ScheduleModal";
 import ScheduleTimeline from "@/components/ScheduleTimeline";
+import { Event, EventFormData } from "@/types/events";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
-interface Event {
-  id: number;
-  organizer: number;
-  organizer_name: string;
-  title: string;
-  description: string;
-  category: { id: number; name: string; description: string } | null;
-  tags: string[];
-  image: string | null;
-  start_time: string;
-  end_time: string;
-  venue: string;
-  location_map_url: string;
-  visibility: string;
-  status: string;
-  capacity: number;
-  attending_count: number;
-  interested_count: number;
-  allow_waitlist: boolean;
-  created_at: string;
-  updated_at: string;
-}
 
 interface ScheduleInput {
   start_datetime?: string | Date | null;
@@ -48,21 +27,6 @@ interface ScheduleInput {
   agenda?: string;
 }
 
-interface EventFormData {
-  title: string;
-  description: string;
-  category?: { id: number; name: string };
-  tags: string[];
-  image?: File | string | null;
-  start_time?: string;
-  end_time?: string;
-  venue: string;
-  location_map_url: string;
-  visibility: string;
-  status: string;
-  capacity: number;
-  allow_waitlist: boolean;
-}
 
 export default function OrganizerEventDetailPage() {
   const { id } = useParams();

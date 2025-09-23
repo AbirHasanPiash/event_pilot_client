@@ -4,7 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "react-hot-toast";
 import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
-import { RefreshCcw, BarChart2, LineChart as LineChartIcon } from "lucide-react";
+import {
+  RefreshCcw,
+  BarChart2,
+  LineChart as LineChartIcon,
+} from "lucide-react";
 import {
   ResponsiveContainer,
   BarChart,
@@ -21,10 +25,14 @@ import { useSafeApiFetch } from "@/lib/apiWrapper";
 
 // Components (replace shadcn/ui if not installed)
 const Card = ({ children }: { children: React.ReactNode }) => (
-  <div className="rounded-2xl shadow-md p-4 bg-white dark:bg-gray-900">{children}</div>
+  <div className="rounded-2xl shadow-md p-4 bg-white dark:bg-gray-900">
+    {children}
+  </div>
 );
 const CardHeader = ({ children }: { children: React.ReactNode }) => (
-  <div className="pb-2 border-b border-gray-200 dark:border-gray-700 mb-2">{children}</div>
+  <div className="pb-2 border-b border-gray-200 dark:border-gray-700 mb-2">
+    {children}
+  </div>
 );
 const CardTitle = ({ children }: { children: React.ReactNode }) => (
   <h2 className="text-lg font-semibold">{children}</h2>
@@ -56,7 +64,10 @@ const Button = ({
     md: "px-4 py-2 text-base",
   };
   return (
-    <button onClick={onClick} className={`${base} ${variants[variant]} ${sizes[size]}`}>
+    <button
+      onClick={onClick}
+      className={`${base} ${variants[variant]} ${sizes[size]}`}
+    >
       {children}
     </button>
   );
@@ -95,8 +106,11 @@ export default function OrganizerDashboardPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await apiFetch("/api/dashboard/organizer");
+      const res = await apiFetch<OrganizerDashboardData>(
+        "/api/dashboard/organizer"
+      );
       setData(res);
+
       setLastUpdated(new Date());
     } catch {
       setError("Failed to load dashboard data");
@@ -113,17 +127,34 @@ export default function OrganizerDashboardPage() {
   }, [fetchData]);
 
   const chartData =
-    timeframe === "monthly" ? data?.monthly_stats || [] : data?.yearly_stats || [];
+    timeframe === "monthly"
+      ? data?.monthly_stats || []
+      : data?.yearly_stats || [];
 
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Organizer Dashboard</h1>
         <div className="flex gap-2">
-          <Button onClick={() => setChartType(chartType === "bar" ? "line" : "bar")} variant="outline" size="sm">
-            {chartType === "bar" ? <BarChart2 size={16} /> : <LineChartIcon size={16} />} Chart
+          <Button
+            onClick={() => setChartType(chartType === "bar" ? "line" : "bar")}
+            variant="outline"
+            size="sm"
+          >
+            {chartType === "bar" ? (
+              <BarChart2 size={16} />
+            ) : (
+              <LineChartIcon size={16} />
+            )}{" "}
+            Chart
           </Button>
-          <Button onClick={() => setTimeframe(timeframe === "monthly" ? "yearly" : "monthly")} variant="outline" size="sm">
+          <Button
+            onClick={() =>
+              setTimeframe(timeframe === "monthly" ? "yearly" : "monthly")
+            }
+            variant="outline"
+            size="sm"
+          >
             {timeframe === "monthly" ? "Last 12 Months" : "Last 5 Years"}
           </Button>
           <Button onClick={fetchData} size="sm">
@@ -144,7 +175,9 @@ export default function OrganizerDashboardPage() {
                 <CardTitle>Total Events</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-3xl font-bold text-indigo-600">{data.total_events}</p>
+                <p className="text-3xl font-bold text-indigo-600">
+                  {data.total_events}
+                </p>
               </CardContent>
             </Card>
             <Card>
@@ -152,7 +185,9 @@ export default function OrganizerDashboardPage() {
                 <CardTitle>Total Attendees</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-3xl font-bold text-emerald-600">{data.total_attendees}</p>
+                <p className="text-3xl font-bold text-emerald-600">
+                  {data.total_attendees}
+                </p>
               </CardContent>
             </Card>
           </div>
@@ -161,7 +196,9 @@ export default function OrganizerDashboardPage() {
           <Card>
             <CardHeader>
               <CardTitle>
-                {timeframe === "monthly" ? "Events & Attendees (Last 12 Months)" : "Events & Attendees (Last 5 Years)"}
+                {timeframe === "monthly"
+                  ? "Events & Attendees (Last 12 Months)"
+                  : "Events & Attendees (Last 5 Years)"}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -170,22 +207,40 @@ export default function OrganizerDashboardPage() {
                   {chartType === "bar" ? (
                     <BarChart data={chartData}>
                       <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey={timeframe === "monthly" ? "month" : "year"} />
+                      <XAxis
+                        dataKey={timeframe === "monthly" ? "month" : "year"}
+                      />
                       <YAxis />
                       <Tooltip />
                       <Legend />
                       <Bar dataKey="events" fill="#4F46E5" name="Events" />
-                      <Bar dataKey="attendees" fill="#10B981" name="Attendees" />
+                      <Bar
+                        dataKey="attendees"
+                        fill="#10B981"
+                        name="Attendees"
+                      />
                     </BarChart>
                   ) : (
                     <LineChart data={chartData}>
                       <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey={timeframe === "monthly" ? "month" : "year"} />
+                      <XAxis
+                        dataKey={timeframe === "monthly" ? "month" : "year"}
+                      />
                       <YAxis />
                       <Tooltip />
                       <Legend />
-                      <Line type="monotone" dataKey="events" stroke="#4F46E5" name="Events" />
-                      <Line type="monotone" dataKey="attendees" stroke="#10B981" name="Attendees" />
+                      <Line
+                        type="monotone"
+                        dataKey="events"
+                        stroke="#4F46E5"
+                        name="Events"
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="attendees"
+                        stroke="#10B981"
+                        name="Attendees"
+                      />
                     </LineChart>
                   )}
                 </ResponsiveContainer>

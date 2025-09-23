@@ -30,9 +30,15 @@ export default function AdminDashboardLayout({
   const [organizerCount, setOrganizerCount] = useState<number>(0);
   const safeApiFetch = useSafeApiFetch();
 
-  const [showBadge, setShowBadge] = useState(() => {
-    return sessionStorage.getItem("visitedOrganizerRequests") !== "true";
-  });
+  const [showBadge, setShowBadge] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const visited =
+        sessionStorage.getItem("visitedOrganizerRequests") === "true";
+      setShowBadge(!visited);
+    }
+  }, []);
 
   interface OrganizerRequest {
     id: number;

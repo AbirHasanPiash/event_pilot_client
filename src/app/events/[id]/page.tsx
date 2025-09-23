@@ -56,15 +56,7 @@ export default function EventDetailsPage() {
 
   const [event, setEvent] = useState<EventDetail | null>(null);
   const [loading, setLoading] = useState(true);
-
-  const fetchEvent = async () => {
-    try {
-      const data = await safeApiFetch<EventDetail>(`/api/events/${id}/`);
-      setEvent(data);
-    } finally {
-      setLoading(false);
-    }
-  };
+   
 
   useEffect(() => {
     if (!id) return;

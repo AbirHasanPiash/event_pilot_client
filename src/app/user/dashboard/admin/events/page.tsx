@@ -7,6 +7,7 @@ import { toast } from "react-hot-toast";
 import { useSafeApiFetch } from "@/lib/apiWrapper";
 import ConfirmModal from "@/components/ConfirmModal";
 import EventModal from "@/components/EventModal";
+import type { Event, EventFormData, AdminEventForm } from "@/types/events";
 import Image from "next/image";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
@@ -23,43 +24,21 @@ interface PaginatedResponse<T> {
   results: T[];
 }
 
-interface Event {
-  id: number;
-  organizer: number;
-  organizer_name: string;
-  title: string;
-  description: string;
-  category: { id: number; name: string; description: string };
-  tags: string[];
-  image: string | null;
-  start_time: string;
-  end_time: string;
-  venue: string;
-  location_map_url: string;
-  visibility: string;
-  status: string;
-  capacity: number;
-  allow_waitlist: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-interface EventFormData {
-  id?: number | null;
-  title: string;
-  description: string;
-  category?: { id: number; name: string; description: string } | null;
-  tags: string[];
-  image: File | null;
-  start_time: string | null;
-  end_time: string | null;
-  venue: string;
-  location_map_url: string;
-  visibility: string;
-  status: string;
-  capacity: number;
-  allow_waitlist: boolean;
-}
+const EMPTY_EVENT_DATA: EventFormData = {
+  title: "",
+  description: "",
+  category: null,
+  tags: [],
+  image: null,
+  start_time: null,
+  end_time: null,
+  venue: "",
+  location_map_url: "",
+  visibility: "public",
+  status: "draft",
+  capacity: 0,
+  allow_waitlist: false,
+};
 
 export default function AdminEventsPage() {
   const router = useRouter();
@@ -89,46 +68,20 @@ export default function AdminEventsPage() {
   const initialPage = parseInt(searchParams.get("page") || "1", 10);
   const [currentPage, setCurrentPage] = useState<number>(initialPage);
 
-  const emptyEventData: EventFormData = {
-    title: "",
-    description: "",
-    category: null,
-    tags: [],
-    image: null,
-    start_time: "",
-    end_time: "",
-    venue: "",
-    location_map_url: "",
-    visibility: "public",
-    status: "draft",
-    capacity: 0,
-    allow_waitlist: false,
-  };
-
-  const EMPTY_EVENT_DATA: EventFormData = {
-    title: "",
-    description: "",
-    category: null,
-    tags: [],
-    image: null,
-    start_time: "",
-    end_time: "",
-    venue: "",
-    location_map_url: "",
-    visibility: "public",
-    status: "draft",
-    capacity: 0,
-    allow_waitlist: false,
-  };
-
   const memoizedInitialData = useMemo(() => {
-    return editingEvent
-      ? {
-          ...editingEvent,
-          image: null,
-          existingImage: editingEvent?.image || null,
-        }
-      : EMPTY_EVENT_DATA;
+    if (!editingEvent) return EMPTY_EVENT_DATA;
+
+    return {
+      ...editingEvent,
+      image: null,
+      existingImage: editingEvent.image || undefined,
+      category: editingEvent.category ? { id: editingEvent.category.id } : null,
+      tags: editingEvent.tags || [],
+      start_time: editingEvent.start_time || null,
+      end_time: editingEvent.end_time || null,
+      capacity: editingEvent.capacity ?? 0,
+      allow_waitlist: editingEvent.allow_waitlist ?? false,
+    };
   }, [editingEvent]);
 
   // Load events
@@ -277,6 +230,22 @@ export default function AdminEventsPage() {
     setSubmitting(false);
   };
 
+  const handleFormSubmitWrapper = (data: AdminEventForm) => {
+    const transformed: EventFormData = {
+      ...data,
+      category: data.category
+        ? {
+            id: data.category.id,
+            name: data.category.name || "",
+            description: data.category.description || "",
+          }
+        : null,
+      capacity: data.capacity ?? 0,
+    };
+
+    handleFormSubmit(transformed).catch(console.error);
+  };
+
   // Handle Delete
   const confirmDelete = async () => {
     if (eventToDelete === null) return;
@@ -378,8 +347,11 @@ export default function AdminEventsPage() {
                 <div className="mt-2 text-xs text-gray-400">
                   <p>
                     <strong>When:</strong>{" "}
-                    {dayjs(event.start_time).format("MMM D, YYYY h:mm A")}
+                    {event.start_time
+                      ? dayjs(event.start_time).format("MMM D, YYYY h:mm A")
+                      : "—"}
                   </p>
+
                   {event.category?.name && (
                     <p>
                       <strong>Category:</strong> {event.category.name}
@@ -471,7 +443,7 @@ export default function AdminEventsPage() {
           setShowFormModal(false);
           setEditingEvent(null);
         }}
-        onSubmit={handleFormSubmit}
+        onSubmit={handleFormSubmitWrapper}
         initialData={memoizedInitialData}
         loading={submitting}
       />

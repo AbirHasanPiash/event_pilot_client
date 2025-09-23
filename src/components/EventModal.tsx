@@ -3,25 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useSafeApiFetch } from "@/lib/apiWrapper";
 import Image from "next/image";
-
-type AdminCategory = { id: number; name?: string; description?: string } | null;
-
-type AdminEventForm = {
-  id?: number | null;
-  title: string;
-  description: string;
-  category?: AdminCategory;
-  tags: string[];
-  image: File | null;
-  start_time: string | null;
-  end_time: string | null;
-  venue: string;
-  location_map_url: string;
-  visibility: string;
-  status: string;
-  capacity: number | null;
-  allow_waitlist: boolean;
-};
+import { AdminEventForm } from "@/types/events";
 
 type ModalState = {
   id?: number | null;
@@ -40,14 +22,13 @@ type ModalState = {
   allow_waitlist: boolean;
 };
 
-interface ExtendedInitialData
-  extends Partial<
-    AdminEventForm & {
-      image_url?: string;
-      existingImage?: string;
-      category_id?: number | null;
-    }
-  > {}
+type ExtendedInitialData = Partial<
+  AdminEventForm & {
+    image_url?: string;
+    existingImage?: string;
+    category_id?: number | null;
+  }
+>;
 
 interface EventModalProps {
   isOpen: boolean;
@@ -141,8 +122,7 @@ export default function EventModal({
     const existing =
       initialData?.image_url ??
       initialData?.existingImage ??
-      initialData?.image ??
-      null;
+      (typeof initialData?.image === "string" ? initialData.image : null);
 
     setPreviewUrl(existing);
 
@@ -390,6 +370,7 @@ export default function EventModal({
               {previewUrl.startsWith("blob:") ||
               previewUrl.startsWith("data:") ? (
                 <div className="w-full h-48 mb-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={previewUrl}
                     alt="Preview"

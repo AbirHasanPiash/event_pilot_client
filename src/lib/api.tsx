@@ -1,4 +1,4 @@
-export async function apiFetch<T = any>(
+export async function apiFetch<T = unknown>(
   endpoint: string,
   options: RequestInit = {},
   includeAuth: boolean = true
@@ -51,7 +51,7 @@ export async function apiFetch<T = any>(
 
   // Try to parse response content
   const contentType = response.headers.get("content-type");
-  let data: any = null;
+  let data: unknown = null;
 
   try {
     if (contentType?.includes("application/json")) {
@@ -67,18 +67,18 @@ export async function apiFetch<T = any>(
   if (!response.ok) {
     let message = "Something went wrong.";
 
-    if (data?.detail) {
-      message = data.detail;
+    if (data && typeof data === "object" && "detail" in data) {
+      message = (data as { detail: string }).detail;
     } else if (typeof data === "string") {
       message = data;
     } else if (data && typeof data === "object") {
       // Collect all error messages from fields
-      const errors = Object.entries(data)
+      const errors = Object.entries(data as Record<string, unknown>)
         .map(([field, messages]) => {
           if (Array.isArray(messages)) {
             return `${field}: ${messages.join(" ")}`;
           }
-          return `${field}: ${messages}`;
+          return `${field}: ${String(messages)}`;
         })
         .join(" ");
       message = errors || message;
@@ -87,7 +87,7 @@ export async function apiFetch<T = any>(
     throw new Error(message);
   }
 
-  return data;
+  return data as T;
 }
 
 async function refreshAccessToken(): Promise<string | null> {

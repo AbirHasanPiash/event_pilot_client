@@ -2,23 +2,16 @@
 
 import React, { useEffect, useState } from "react";
 import { Pencil } from "lucide-react";
-
-interface UserItem {
-  id: number;
-  first_name: string;
-  last_name: string;
-  email: string;
-  role: string | null;
-  is_active: boolean;
-}
+import type { UserItem } from "@/types/users";
 
 type Props = {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (payload: { id: number; role: string | null }) => void;
-  user?: UserItem | null;
+  user: UserItem | null;
   loading?: boolean;
 };
+
 
 const ROLE_OPTIONS: { value: string; label: string }[] = [
   { value: "admin", label: "Admin" },

@@ -13,6 +13,7 @@ import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { useAuth } from "@/context/AuthContext";
+import { Event, EventFormData } from "@/types/events";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -22,42 +23,6 @@ interface PaginatedResponse<T> {
   next: string | null;
   previous: string | null;
   results: T[];
-}
-
-interface Event {
-  id: number;
-  title: string;
-  description: string;
-  category: { id: number; name: string; description: string } | null;
-  tags: string[];
-  image: string | null;
-  start_time: string;
-  end_time: string;
-  venue: string;
-  location_map_url: string;
-  visibility: string;
-  status: string;
-  capacity: number;
-  allow_waitlist: boolean;
-  created_at: string;
-  updated_at: string;
-}
-
-interface EventFormData {
-  id?: number | null;
-  title: string;
-  description: string;
-  category?: { id: number; name: string; description: string } | null;
-  tags: string[];
-  image: File | null;
-  start_time: string | null;
-  end_time: string | null;
-  venue: string;
-  location_map_url: string;
-  visibility: string;
-  status: string;
-  capacity: number;
-  allow_waitlist: boolean;
 }
 
 export default function OrganizerEventsPage() {
@@ -113,7 +78,7 @@ export default function OrganizerEventsPage() {
       ? {
           ...editingEvent,
           image: null,
-          existingImage: editingEvent?.image || null,
+          existingImage: editingEvent?.image || undefined,
         }
       : emptyEventData;
   }, [editingEvent, emptyEventData]);
