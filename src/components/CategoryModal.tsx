@@ -5,7 +5,11 @@ import React, { useState, useEffect } from "react";
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: { id?: number | null; name: string; description: string }) => void;
+  onSubmit: (data: {
+    id?: number | null;
+    name: string;
+    description: string;
+  }) => void;
   initialData?: { id?: number | null; name: string; description: string };
   loading?: boolean;
 }
@@ -27,9 +31,7 @@ export default function CategoryModal({
         description: initialData?.description ?? "",
       });
     }
-    // Only run effect when modal is opened
-    // Avoid using full object dependency like "initialData"
-  }, [isOpen]);
+  }, [isOpen, initialData?.id, initialData?.name, initialData?.description]);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>

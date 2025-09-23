@@ -2,16 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { toast } from "react-hot-toast";
 import { useSafeApiFetch } from "@/lib/apiWrapper";
-import {
-  CheckCircle2,
-  XCircle,
-  User,
-  ArrowLeft,
-  ArrowRight,
-} from "lucide-react";
-import dayjs from "dayjs";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import Image from "next/image";
 
@@ -20,12 +12,8 @@ interface OrganizerRequest {
   user: number;
   first_name: string;
   last_name: string;
-  user_email: string;
   profile_image?: string | null;
   status: "pending" | "approved" | "rejected";
-  created_at: string;
-  reviewed_at?: string | null;
-  reason?: string;
 }
 
 interface PaginatedResponse<T> {
@@ -44,31 +32,79 @@ export default function OrganizerRequestsPage() {
   const initialPage = parseInt(searchParams.get("page") || "1", 10);
 
   const [requests, setRequests] = useState<OrganizerRequest[]>([]);
-  const [count, setCount] = useState(0);
+  const [, setCount] = useState(0);
   const [next, setNext] = useState<string | null>(null);
   const [previous, setPrevious] = useState<string | null>(null);
-
   const [filter, setFilter] = useState(initialFilter);
   const [currentPage, setCurrentPage] = useState(initialPage);
-
   const [loading, setLoading] = useState(true);
 
-  // Load requests
+  // Cache for (status + page)
+  const [cache, setCache] = useState<
+    Record<string, PaginatedResponse<OrganizerRequest>>
+  >({});
+
+  const makeKey = (status: string, page: number) => `${status}-${page}`;
+
+  // Load requests with cache + background refresh
   const loadRequests = useCallback(
     async (status: string, page = 1, pageUrl?: string) => {
+      const key = makeKey(status, page);
+
+      // Serve cached data instantly if available
+      if (cache[key]) {
+        const cached = cache[key];
+        setRequests(cached.results);
+        setCount(cached.count);
+        setNext(cached.next);
+        setPrevious(cached.previous);
+        setLoading(false);
+
+        // background refresh
+        safeApiFetch<PaginatedResponse<OrganizerRequest>>(
+          pageUrl ||
+            `/api/dashboard/request-organizer/list/?status=${status}&page=${page}`
+        ).then((fresh) => {
+          if (fresh) {
+            setCache((prev) => ({ ...prev, [key]: fresh }));
+            if (makeKey(filter, currentPage) === key) {
+              setRequests(fresh.results);
+              setCount(fresh.count);
+              setNext(fresh.next);
+              setPrevious(fresh.previous);
+            }
+          }
+        });
+        return;
+      }
+
+      // Otherwise fetch fresh
       setLoading(true);
-
-      const url =
+      const data = await safeApiFetch<PaginatedResponse<OrganizerRequest>>(
         pageUrl ||
-        `/api/dashboard/request-organizer/list/?status=${status}&page=${page}`;
-
-      const data = await safeApiFetch<PaginatedResponse<OrganizerRequest>>(url);
+          `/api/dashboard/request-organizer/list/?status=${status}&page=${page}`
+      );
 
       if (data) {
         setRequests(data.results);
         setCount(data.count);
         setNext(data.next);
         setPrevious(data.previous);
+        setCache((prev) => ({ ...prev, [key]: data }));
+
+        // Prefetch next page
+        if (data.next) {
+          safeApiFetch<PaginatedResponse<OrganizerRequest>>(data.next).then(
+            (nextData) => {
+              if (nextData) {
+                setCache((prev) => ({
+                  ...prev,
+                  [makeKey(status, page + 1)]: nextData,
+                }));
+              }
+            }
+          );
+        }
       } else {
         setRequests([]);
         setCount(0);
@@ -77,42 +113,16 @@ export default function OrganizerRequestsPage() {
       }
       setLoading(false);
     },
-    [safeApiFetch]
+    [safeApiFetch, cache, filter, currentPage]
   );
-
-  // Update request status
-  const updateRequest = async (
-    id: number,
-    newStatus: "approved" | "rejected"
-  ) => {
-    const result = await safeApiFetch(
-      `/api/dashboard/request-organizer/${id}/update/`,
-      {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
-      }
-    );
-
-    if (result) {
-      toast.success(`Request ${newStatus}!`);
-      loadRequests(filter, currentPage);
-    } else {
-      toast.error("Failed to update request.");
-    }
-  };
 
   // Handle filter change
   const handleFilterChange = (value: string) => {
     setFilter(value);
     setCurrentPage(1);
-
     const params = new URLSearchParams(Array.from(searchParams.entries()));
-    if (value && value !== "pending") {
-      params.set("status", value);
-    } else {
-      params.delete("status");
-    }
+    if (value && value !== "pending") params.set("status", value);
+    else params.delete("status");
     params.set("page", "1");
     router.replace(`/user/dashboard/admin/organizer-requests?${params}`);
     loadRequests(value, 1);
@@ -128,14 +138,13 @@ export default function OrganizerRequestsPage() {
     loadRequests(filter, newPage, url);
   };
 
-  // Initial load
   useEffect(() => {
     loadRequests(initialFilter, initialPage);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
-    <div className="max-w-6xl mx-auto p-6 space-y-8">
+    <div className="max-w-5xl mx-auto p-6 space-y-8">
       {/* Header */}
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold">Organizer Requests</h2>
@@ -150,19 +159,20 @@ export default function OrganizerRequestsPage() {
         </select>
       </div>
 
-      {loading ? (
+      {loading && requests.length === 0 ? (
         <LoadingSpinner />
       ) : requests.length === 0 ? (
         <p className="text-gray-500">No {filter} requests found.</p>
       ) : (
         <>
-          {/* Horizontal list */}
+          {/* Requests List */}
           <div className="space-y-4">
             {requests.map((req) => (
               <div
                 key={req.id}
                 className="flex items-center justify-between p-4 border rounded-lg bg-white dark:bg-gray-900 shadow-sm"
               >
+                {/* Profile */}
                 <div className="flex items-center gap-4">
                   <div className="relative w-16 h-16">
                     {req.profile_image ? (
@@ -173,68 +183,27 @@ export default function OrganizerRequestsPage() {
                         className="rounded-full object-cover"
                       />
                     ) : (
-                      <div className="w-full h-full rounded-full bg-indigo-200 text-indigo-800 flex items-center justify-center text-3xl font-bold">
-                        {req?.first_name[0]}
+                      <div className="w-full h-full rounded-full bg-indigo-200 text-indigo-800 flex items-center justify-center text-xl font-bold">
+                        {req.first_name[0]}
                       </div>
                     )}
                   </div>
-                  <div>
-                    <p className="font-semibold">
-                      {req.first_name} {req.last_name}
-                    </p>
-                    <p className="text-sm text-gray-500">{req.user_email}</p>
-                    <p className="text-xs text-gray-400">
-                      Requested:{" "}
-                      {dayjs(req.created_at).format("MMM D, YYYY h:mm A")}
-                    </p>
-                    {req.reviewed_at && (
-                      <p className="text-xs text-gray-400">
-                        Reviewed:{" "}
-                        {dayjs(req.reviewed_at).format("MMM D, YYYY h:mm A")}
-                      </p>
-                    )}
-                  </div>
+                  <p className="font-semibold">
+                    {req.first_name} {req.last_name}
+                  </p>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`capitalize text-sm font-medium ${
-                      req.status === "pending"
-                        ? "text-yellow-600"
-                        : req.status === "approved"
-                        ? "text-green-600"
-                        : "text-red-600"
-                    }`}
-                  >
-                    {req.status}
-                  </span>
-
-                  <button
-                    onClick={() =>
-                      router.push(`/user/dashboard/admin/users/${req.user}`)
-                    }
-                    className="px-3 py-1 text-xs border border-indigo-500 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-white/10 rounded"
-                  >
-                    View Profile
-                  </button>
-
-                  {req.status === "pending" && (
-                    <>
-                      <button
-                        onClick={() => updateRequest(req.id, "approved")}
-                        className="flex items-center gap-1 px-3 py-1 text-xs border border-green-500 text-green-600 hover:bg-green-50 dark:hover:bg-white/10 rounded"
-                      >
-                        <CheckCircle2 size={14} /> Approve
-                      </button>
-                      <button
-                        onClick={() => updateRequest(req.id, "rejected")}
-                        className="flex items-center gap-1 px-3 py-1 text-xs border border-red-500 text-red-600 hover:bg-red-50 dark:hover:bg-white/10 rounded"
-                      >
-                        <XCircle size={14} /> Reject
-                      </button>
-                    </>
-                  )}
-                </div>
+                {/* Manage Button */}
+                <button
+                  onClick={() =>
+                    router.push(
+                      `/user/dashboard/admin/organizer-requests/${req.id}`
+                    )
+                  }
+                  className="px-4 py-2 border border-indigo-500 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-white/10 rounded"
+                >
+                  Manage
+                </button>
               </div>
             ))}
           </div>
@@ -246,9 +215,9 @@ export default function OrganizerRequestsPage() {
               <button
                 onClick={() => goToPage(Math.max(1, currentPage - 1))}
                 disabled={!previous}
-                className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md font-medium transition w-full sm:w-auto ${
+                className={`inline-flex items-center gap-2 px-4 py-2 rounded-md ${
                   previous
-                    ? "bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-white"
+                    ? "bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-white"
                     : "opacity-50 cursor-not-allowed"
                 }`}
               >
@@ -257,9 +226,9 @@ export default function OrganizerRequestsPage() {
               <button
                 onClick={() => goToPage(currentPage + 1)}
                 disabled={!next}
-                className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md font-medium transition w-full sm:w-auto ${
+                className={`inline-flex items-center gap-2 px-4 py-2 rounded-md ${
                   next
-                    ? "bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-white"
+                    ? "bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-white"
                     : "opacity-50 cursor-not-allowed"
                 }`}
               >

@@ -3,7 +3,6 @@
 import { useForm } from "react-hook-form";
 import { useAuth } from "@/context/AuthContext";
 import Link from "next/link";
-import { useState } from "react";
 import toast from "react-hot-toast";
 
 type LoginForm = {
@@ -19,14 +18,16 @@ export default function LoginPage() {
   } = useForm<LoginForm>();
 
   const { login } = useAuth();
-  const [serverError, setServerError] = useState("");
 
   const onSubmit = async (data: LoginForm) => {
     try {
       await login(data.email, data.password);
-    } catch (err: any) {
-      setServerError(err.message || "Login failed.");
-      toast.error("Login failed. Please check your credentials.");
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        toast.error(err.message);
+      } else {
+        toast.error("Login failed. Please check your credentials.");
+      }
     }
   };
 

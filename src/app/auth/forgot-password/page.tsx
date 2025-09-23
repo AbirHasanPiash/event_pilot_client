@@ -3,8 +3,7 @@
 import { useForm } from "react-hook-form";
 import { useState } from "react";
 import toast from "react-hot-toast";
-import { useRouter } from "next/navigation";
-import { apiFetch } from "@/lib/api"; // or useSafeApiFetch if you prefer
+import { apiFetch } from "@/lib/api";
 import Link from "next/link";
 
 type FormData = {
@@ -20,7 +19,6 @@ export default function ForgotPasswordPage() {
 
   const [serverError, setServerError] = useState("");
   const [emailSent, setEmailSent] = useState(false);
-  const router = useRouter();
 
   const onSubmit = async (data: FormData) => {
     setServerError("");
@@ -34,8 +32,12 @@ export default function ForgotPasswordPage() {
 
       setEmailSent(true);
       toast.success("Password reset email sent!");
-    } catch (err: any) {
-      setServerError(err.message || "Failed to send reset email.");
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setServerError(err.message);
+      } else {
+        setServerError("Failed to send reset email.");
+      }
     }
   };
 
@@ -48,7 +50,8 @@ export default function ForgotPasswordPage() {
 
         {emailSent ? (
           <p className="text-center text-green-600">
-            If an account with that email exists, a reset link has been sent. Check your inbox.
+            If an account with that email exists, a reset link has been sent.
+            Check your inbox.
           </p>
         ) : (
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">

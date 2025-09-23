@@ -34,7 +34,7 @@ export default function ProfilePage() {
 
   useEffect(() => {
     apiFetch<Profile>("/api/profile/me/").then(setProfile);
-  }, []);
+  }, [apiFetch]);
 
   useEffect(() => {
     if (profile) reset(profile);
@@ -121,7 +121,7 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-black mt-16 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gray-50 dark:bg-black pt-32 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-3xl mx-auto bg-white dark:bg-gray-900 shadow-xl rounded-xl p-8">
         {/* Image Section */}
         <div className="flex flex-col md:flex-row items-center gap-6">

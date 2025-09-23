@@ -89,21 +89,24 @@ export default function OrganizerEventsPage() {
   const initialPage = parseInt(searchParams.get("page") || "1", 10);
   const [currentPage, setCurrentPage] = useState<number>(initialPage);
 
-  const emptyEventData: EventFormData = {
-    title: "",
-    description: "",
-    category: null,
-    tags: [],
-    image: null,
-    start_time: "",
-    end_time: "",
-    venue: "",
-    location_map_url: "",
-    visibility: "public",
-    status: "draft",
-    capacity: 0,
-    allow_waitlist: false,
-  };
+  const emptyEventData: EventFormData = useMemo(
+    () => ({
+      title: "",
+      description: "",
+      category: null,
+      tags: [],
+      image: null,
+      start_time: "",
+      end_time: "",
+      venue: "",
+      location_map_url: "",
+      visibility: "public",
+      status: "draft",
+      capacity: 0,
+      allow_waitlist: false,
+    }),
+    []
+  );
 
   const memoizedInitialData = useMemo(() => {
     return editingEvent
@@ -113,7 +116,7 @@ export default function OrganizerEventsPage() {
           existingImage: editingEvent?.image || null,
         }
       : emptyEventData;
-  }, [editingEvent]);
+  }, [editingEvent, emptyEventData]);
 
   // Load events scoped to this organizer
   const loadEvents = useCallback(
@@ -150,7 +153,7 @@ export default function OrganizerEventsPage() {
     if (user) {
       loadEvents(initialSearch, initialDateFilter, initialPage);
     }
-  }, [user]);
+  }, [user, loadEvents, initialSearch, initialDateFilter, initialPage]);
 
   // Debounced load on filter/page change
   useEffect(() => {
@@ -176,7 +179,7 @@ export default function OrganizerEventsPage() {
     }, 500);
 
     return () => clearTimeout(delay);
-  }, [searchTerm, dateFilter, currentPage, loadEvents, router, user]);
+  }, [searchTerm, dateFilter, currentPage, loadEvents, router, user, searchParams]);
 
   const goToPage = (newPage: number) => {
     const params = new URLSearchParams(Array.from(searchParams.entries()));

@@ -27,7 +27,7 @@ export default function AdminCategoriesPage() {
   const safeApiFetch = useSafeApiFetch();
 
   const [categories, setCategories] = useState<Category[]>([]);
-  const [count, setCount] = useState(0);
+  const [, setCount] = useState(0);
 
   const [loading, setLoading] = useState(true);
 

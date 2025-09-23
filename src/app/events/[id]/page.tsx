@@ -68,8 +68,18 @@ export default function EventDetailsPage() {
 
   useEffect(() => {
     if (!id) return;
+
+    const fetchEvent = async () => {
+      try {
+        const data = await safeApiFetch<EventDetail>(`/api/events/${id}/`);
+        setEvent(data);
+      } finally {
+        setLoading(false);
+      }
+    };
+
     fetchEvent();
-  }, [id]);
+  }, [id, safeApiFetch]);
 
   const handleReaction = async (
     status: "attending" | "interested" | "none"
@@ -90,8 +100,14 @@ export default function EventDetailsPage() {
         setEvent(updated);
         toast.success("Reaction updated successfully");
       }
-    } catch (err: any) {
-      toast.error(err.detail || "Failed to update reaction");
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        toast.error(err.message);
+      } else if (typeof err === "object" && err !== null && "detail" in err) {
+        toast.error(String((err as { detail: string }).detail));
+      } else {
+        toast.error("Failed to update reaction");
+      }
     }
   };
 
@@ -199,7 +215,7 @@ export default function EventDetailsPage() {
             </div>
           )}
           {/* Schedule Timeline */}
-          <ScheduleTimeline/>
+          <ScheduleTimeline />
         </div>
 
         {/* Sidebar */}

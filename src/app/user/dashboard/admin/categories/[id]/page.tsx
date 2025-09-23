@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "react-hot-toast";
 import { Pencil, Trash2 } from "lucide-react";
@@ -25,19 +25,22 @@ export default function CategoryDetailPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const fetchCategory = async () => {
+  const fetchCategory = useCallback(async () => {
     setLoading(true);
     const data = await safeApiFetch<Category>(`/api/categories/${id}/`);
     if (data) setCategory(data);
     else router.push("/user/dashboard/admin/categories");
     setLoading(false);
-  };
+  }, [id, router, safeApiFetch]);
 
   useEffect(() => {
     fetchCategory();
-  }, [id]);
-
-  const handleUpdate = async (form: { id?: number | null; name: string; description: string }) => {
+  }, [fetchCategory]);
+  const handleUpdate = async (form: {
+    id?: number | null;
+    name: string;
+    description: string;
+  }) => {
     if (!category) return;
     setSubmitting(true);
 
@@ -56,14 +59,17 @@ export default function CategoryDetailPage() {
 
   const handleDelete = async () => {
     if (!category) return;
-    const result = await safeApiFetch(`/api/categories/${category.id}/`, { method: "DELETE" });
+    const result = await safeApiFetch(`/api/categories/${category.id}/`, {
+      method: "DELETE",
+    });
     if (result !== null) {
       toast.success("Category deleted successfully!");
       router.push("/user/dashboard/admin/categories");
     }
   };
 
-  if (loading || !category) return <p className="p-6 text-gray-500">Loading...</p>;
+  if (loading || !category)
+    return <p className="p-6 text-gray-500">Loading...</p>;
 
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
@@ -87,7 +93,9 @@ export default function CategoryDetailPage() {
 
       <div className="bg-white dark:bg-gray-900 border border-indigo-500 p-6 rounded-lg shadow">
         <h2 className="text-lg font-medium mb-2">Description</h2>
-        <p className="text-gray-700 dark:text-gray-300 whitespace-pre-line">{category.description}</p>
+        <p className="text-gray-700 dark:text-gray-300 whitespace-pre-line">
+          {category.description}
+        </p>
       </div>
 
       {/* Edit Modal */}

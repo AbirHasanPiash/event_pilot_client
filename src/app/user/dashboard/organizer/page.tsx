@@ -98,7 +98,7 @@ export default function OrganizerDashboardPage() {
       const res = await apiFetch("/api/dashboard/organizer");
       setData(res);
       setLastUpdated(new Date());
-    } catch (e: any) {
+    } catch {
       setError("Failed to load dashboard data");
       toast.error("Failed to load dashboard data");
     } finally {

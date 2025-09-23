@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   ReactNode,
+  useCallback,
 } from "react";
 import { apiFetch } from "@/lib/api";
 import { useRouter } from "next/navigation";
@@ -50,10 +51,15 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
       setUser(userInfo);
 
       if (userInfo?.role === "admin") router.push("/user/dashboard/admin");
-      else if (userInfo?.role === "organizer") router.push("/user/dashboard/organizer");
-      else if (userInfo?.role === "attendee") router.push("/user/dashboard/attendee");
-    } catch (error: any) {
-      throw new Error(error.message || "Login failed.");
+      else if (userInfo?.role === "organizer")
+        router.push("/user/dashboard/organizer");
+      else if (userInfo?.role === "attendee")
+        router.push("/user/dashboard/attendee");
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        throw new Error(error.message || "Login failed.");
+      }
+      throw new Error("Login failed.");
     }
   }
 
@@ -61,12 +67,12 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
     return apiFetch<User>("/auth/users/me/");
   }
 
-  function logout() {
+  const logout = useCallback(() => {
     router.push("/");
     localStorage.removeItem("access");
     localStorage.removeItem("refresh");
     setUser(null);
-  }
+  }, [router]);
 
   useEffect(() => {
     const access = localStorage.getItem("access");
@@ -80,7 +86,7 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
     } else {
       setIsLoading(false);
     }
-  }, []);
+  }, [logout]);
 
   return (
     <AuthContext.Provider value={{ user, login, logout, isLoading }}>

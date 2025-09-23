@@ -40,15 +40,20 @@ type ModalState = {
   allow_waitlist: boolean;
 };
 
+interface ExtendedInitialData
+  extends Partial<
+    AdminEventForm & {
+      image_url?: string;
+      existingImage?: string;
+      category_id?: number | null;
+    }
+  > {}
+
 interface EventModalProps {
   isOpen: boolean;
   onClose: () => void;
-  // AdminEventsPage expects AdminEventForm shape (category object, image File|null)
   onSubmit: (data: AdminEventForm) => void;
-  // initialData may contain admin shape (category object & image url) or category_id
-  initialData?: Partial<
-    AdminEventForm & { image_url?: string; existingImage?: string }
-  >;
+  initialData?: ExtendedInitialData;
   loading?: boolean;
 }
 
@@ -109,9 +114,7 @@ export default function EventModal({
     if (!isOpen) return;
 
     const categoryId =
-      (initialData as any)?.category?.id ??
-      (initialData as any)?.category_id ??
-      null;
+      initialData?.category?.id ?? initialData?.category_id ?? null;
 
     setForm({
       id: initialData?.id ?? null,
@@ -136,9 +139,9 @@ export default function EventModal({
 
     // pick preview from either image_url, existingImage, or admin object's image
     const existing =
-      (initialData as any)?.image_url ??
-      (initialData as any)?.existingImage ??
-      (initialData as any)?.image ??
+      initialData?.image_url ??
+      initialData?.existingImage ??
+      initialData?.image ??
       null;
 
     setPreviewUrl(existing);
@@ -162,29 +165,28 @@ export default function EventModal({
     };
   }, [objectUrl]);
 
-  const handleChange = (
-    e: React.ChangeEvent<
-      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
-    >
+  const handleChange = <
+    T extends HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+  >(
+    e: React.ChangeEvent<T>
   ) => {
     const { name, value, type } = e.target;
+    const key = name as keyof ModalState;
 
-    let parsed: any = value;
+    let parsed: ModalState[typeof key];
 
     if (type === "checkbox" && e.target instanceof HTMLInputElement) {
-      parsed = e.target.checked;
+      parsed = e.target.checked as ModalState[typeof key];
     } else if (type === "number") {
-      parsed = value === "" ? null : Number(value);
+      parsed = (value === "" ? null : Number(value)) as ModalState[typeof key];
+    } else {
+      parsed = value as ModalState[typeof key];
     }
 
-    setForm(
-      (prev) =>
-        ({
-          ...prev,
-          // TS: name is keyof ModalState in runtime; cast to any
-          [name]: parsed,
-        } as any)
-    );
+    setForm((prev) => ({
+      ...prev,
+      [key]: parsed,
+    }));
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -203,10 +205,10 @@ export default function EventModal({
     } else {
       // if user cleared selection, revert preview to existing image (if any)
       const existing =
-        (initialData as any)?.image_url ??
-        (initialData as any)?.existingImage ??
-        (initialData as any)?.image ??
-        null;
+        initialData?.image_url ??
+        initialData?.existingImage ??
+        (typeof initialData?.image === "string" ? initialData.image : null);
+
       setPreviewUrl(existing);
     }
 
@@ -236,10 +238,10 @@ export default function EventModal({
     }
     // clear file selection and revert preview to existing image (if editing)
     const existing =
-      (initialData as any)?.image_url ??
-      (initialData as any)?.existingImage ??
-      (initialData as any)?.image ??
-      null;
+      initialData?.image_url ??
+      initialData?.existingImage ??
+      (typeof initialData?.image === "string" ? initialData.image : null);
+
     setPreviewUrl(existing);
     setForm((prev) => ({ ...prev, image: null }));
   };
@@ -255,7 +257,8 @@ export default function EventModal({
       // prefer to send full category object with id (Admin page expects form.category?.id)
       category: form.category_id
         ? { id: form.category_id }
-        : (initialData as any)?.category ?? null,
+        : initialData?.category ?? null,
+
       tags: form.tags,
       image: form.image ?? null, // File or null
       // note: these are "YYYY-MM-DDTHH:mm" (no timezone). AdminEventsPage currently forwards raw strings;
@@ -399,6 +402,7 @@ export default function EventModal({
                     src={previewUrl}
                     alt="Preview"
                     fill
+                    unoptimized
                     className="object-cover rounded"
                   />
                 </div>

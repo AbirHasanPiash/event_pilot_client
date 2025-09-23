@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "react-hot-toast";
 import { Pencil, Trash2, Calendar, MapPin, Users } from "lucide-react";
@@ -41,6 +41,29 @@ interface Event {
   updated_at: string;
 }
 
+interface ScheduleInput {
+  start_datetime?: string | null;
+  end_datetime?: string | null;
+  title?: string;
+  agenda?: string;
+}
+
+interface EventFormData {
+  title: string;
+  description: string;
+  category?: { id: number; name: string; description: string } | null;
+  tags: string[];
+  image?: File | string | null;
+  start_time?: string;
+  end_time?: string;
+  venue: string;
+  location_map_url: string;
+  visibility: string;
+  status: string;
+  capacity: number;
+  allow_waitlist: boolean;
+}
+
 export default function EventDetailPage() {
   const { id } = useParams();
   const router = useRouter();
@@ -54,8 +77,7 @@ export default function EventDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
 
-  const handleScheduleSubmit = async (schedules: any[]) => {
-    // minimal client-side validation & normalization
+  const handleScheduleSubmit = async (schedules: ScheduleInput[]) => {
     const payload = schedules
       .map((s) => {
         const start = s.start_datetime
@@ -71,7 +93,7 @@ export default function EventDetailPage() {
           agenda: s.agenda?.trim() || "",
         };
       })
-      .filter((s) => s.start_datetime && s.title); // require start + title
+      .filter((s) => s.start_datetime && s.title);
 
     if (payload.length === 0) {
       toast.error(
@@ -97,17 +119,17 @@ export default function EventDetailPage() {
     }
   };
 
-  const fetchEvent = async () => {
+  const fetchEvent = useCallback(async () => {
     setLoading(true);
     const data = await safeApiFetch<Event>(`/api/events/${id}/`);
     if (data) setEvent(data);
     else router.push("/user/dashboard/admin/events");
     setLoading(false);
-  };
+  }, [id, router, safeApiFetch]);
 
   useEffect(() => {
     fetchEvent();
-  }, [id]);
+  }, [fetchEvent]);
 
   const memoizedInitialData = useMemo(() => {
     return event
@@ -119,7 +141,7 @@ export default function EventDetailPage() {
       : {};
   }, [event]);
 
-  const handleUpdate = async (form: any) => {
+  const handleUpdate = async (form: EventFormData) => {
     if (!event) return;
     setSubmitting(true);
 
@@ -145,7 +167,6 @@ export default function EventDetailPage() {
     const result = await safeApiFetch(`/api/events/${event.id}/`, {
       method: "PUT",
       body: formData,
-      headers: {},
     });
 
     if (result) {
@@ -326,7 +347,7 @@ export default function EventDetailPage() {
         </button>
       </div>
 
-      <ScheduleTimeline/>
+      <ScheduleTimeline />
 
       <ScheduleModal
         isOpen={showScheduleModal}

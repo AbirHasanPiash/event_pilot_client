@@ -5,15 +5,10 @@ import { useState, useEffect } from "react";
 interface ScheduleModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (schedules: any[]) => Promise<void>;
+  onSubmit: (schedules: Schedule[]) => Promise<void>;
   mainStart: string;
   mainEnd: string;
-  initialSchedules?: {
-    start_datetime: string;
-    end_datetime: string;
-    title: string;
-    agenda: string;
-  }[];
+  initialSchedules?: Schedule[];
 }
 
 type Schedule = {
@@ -23,6 +18,7 @@ type Schedule = {
   agenda: string;
   errors?: { start?: string; end?: string };
 };
+
 
 export default function ScheduleModal({
   isOpen,

@@ -87,7 +87,7 @@ export default function UpdateRoleModal({
             ))}
           </select>
           <p className="text-xs text-gray-500 mt-1">
-            Choose the user's role. Admin has full access, Organizer can manage events, Attendee has limited access.
+            Choose the user&apos;s role. Admin has full access, Organizer can manage events, Attendee has limited access.
           </p>
         </div>
 

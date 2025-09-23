@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { useSafeApiFetch } from "@/lib/apiWrapper";
 
 export default function AdminDashboardLayout({
   children,
@@ -26,20 +27,68 @@ export default function AdminDashboardLayout({
   const [hydrated, setHydrated] = useState(false);
   const sidebarRef = useRef<HTMLDivElement | null>(null);
   const router = useRouter();
+  const [organizerCount, setOrganizerCount] = useState<number>(0);
+  const safeApiFetch = useSafeApiFetch();
+
+  const [showBadge, setShowBadge] = useState(() => {
+    return sessionStorage.getItem("visitedOrganizerRequests") !== "true";
+  });
+
+  interface OrganizerRequest {
+    id: number;
+    user: number;
+    first_name: string;
+    last_name: string;
+    user_email: string;
+    profile_image?: string | null;
+    status: "pending" | "approved" | "rejected";
+    created_at: string;
+    reviewed_at?: string | null;
+    reason?: string;
+  }
+
+  interface PaginatedResponse<T> {
+    count: number;
+    next: string | null;
+    previous: string | null;
+    results: T[];
+  }
 
   const navItems = [
     { name: "Dashboard", href: "/user/dashboard/admin", icon: LayoutDashboard },
     { name: "Users", href: "/user/dashboard/admin/users", icon: Users },
     { name: "Events", href: "/user/dashboard/admin/events", icon: Calendar },
-    { name: "Categories", href: "/user/dashboard/admin/categories", icon: Folder },
-    { name: "Organizer Requests", href: "/user/dashboard/admin/organizer-requests", icon: FileCheck2 },
-
+    {
+      name: "Categories",
+      href: "/user/dashboard/admin/categories",
+      icon: Folder,
+    },
+    {
+      name: "Organizer Requests",
+      href: "/user/dashboard/admin/organizer-requests",
+      icon: FileCheck2,
+    },
   ];
 
   // Mark as hydrated after first client render
   useEffect(() => {
     setHydrated(true);
   }, []);
+
+  useEffect(() => {
+    async function fetchCount() {
+      try {
+        const data = await safeApiFetch<PaginatedResponse<OrganizerRequest>>(
+          "/api/dashboard/request-organizer/list/?status=pending&page=1"
+        );
+        if (data) setOrganizerCount(data.count || 0);
+      } catch (err) {
+        console.error("Failed to load organizer request count:", err);
+      }
+    }
+
+    fetchCount();
+  }, [safeApiFetch]);
 
   // Close sidebar when clicking outside (mobile only)
   useEffect(() => {
@@ -62,12 +111,16 @@ export default function AdminDashboardLayout({
 
   // Access control
   useEffect(() => {
-  const hasToken = localStorage.getItem("access");
-  if (hydrated && !isLoading && (!user || user.role !== "admin") && hasToken) {
-    router.replace("/unauthorized");
-  }
-}, [hydrated, user, isLoading, router]);
-
+    const hasToken = localStorage.getItem("access");
+    if (
+      hydrated &&
+      !isLoading &&
+      (!user || user.role !== "admin") &&
+      hasToken
+    ) {
+      router.replace("/unauthorized");
+    }
+  }, [hydrated, user, isLoading, router]);
 
   // Show spinner while loading or before hydration
   if (!hydrated || isLoading) {
@@ -98,13 +151,28 @@ export default function AdminDashboardLayout({
               <Link
                 key={name}
                 href={href}
-                className={`flex items-center gap-3 px-4 py-2 rounded-md font-medium transition-colors ${
+                onClick={() => {
+                  if (name === "Organizer Requests") {
+                    sessionStorage.setItem("visitedOrganizerRequests", "true");
+                    setShowBadge(false); // hide badge immediately
+                  }
+                }}
+                className={`flex items-center justify-between px-4 py-2 rounded-md font-medium transition-colors ${
                   pathname === href
                     ? "bg-indigo-600 text-white"
                     : "text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/10"
                 }`}
               >
-                <Icon size={18} className="shrink-0" /> {name}
+                <div className="flex items-center gap-3">
+                  <Icon size={18} className="shrink-0" /> {name}
+                </div>
+                {name === "Organizer Requests" &&
+                  organizerCount > 0 &&
+                  showBadge && (
+                    <span className="ml-2 px-2 py-0.5 text-xs font-semibold rounded-full bg-red-500 text-white">
+                      {organizerCount}
+                    </span>
+                  )}
               </Link>
             ))}
           </nav>

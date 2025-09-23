@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "react-hot-toast";
 import { Pencil, Trash2, Calendar, MapPin, Users } from "lucide-react";
@@ -41,6 +41,29 @@ interface Event {
   updated_at: string;
 }
 
+interface ScheduleInput {
+  start_datetime?: string | Date | null;
+  end_datetime?: string | Date | null;
+  title?: string;
+  agenda?: string;
+}
+
+interface EventFormData {
+  title: string;
+  description: string;
+  category?: { id: number; name: string };
+  tags: string[];
+  image?: File | string | null;
+  start_time?: string;
+  end_time?: string;
+  venue: string;
+  location_map_url: string;
+  visibility: string;
+  status: string;
+  capacity: number;
+  allow_waitlist: boolean;
+}
+
 export default function OrganizerEventDetailPage() {
   const { id } = useParams();
   const router = useRouter();
@@ -54,7 +77,7 @@ export default function OrganizerEventDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
 
-  const handleScheduleSubmit = async (schedules: any[]) => {
+  const handleScheduleSubmit = async (schedules: ScheduleInput[]) => {
     // minimal client-side validation & normalization
     const payload = schedules
       .map((s) => {
@@ -97,17 +120,17 @@ export default function OrganizerEventDetailPage() {
     }
   };
 
-  const fetchEvent = async () => {
+  const fetchEvent = useCallback(async () => {
     setLoading(true);
     const data = await safeApiFetch<Event>(`/api/events/${id}/`);
     if (data) setEvent(data);
     else router.push("/user/dashboard/admin/events");
     setLoading(false);
-  };
+  }, [id, router, safeApiFetch]);
 
   useEffect(() => {
     fetchEvent();
-  }, [id]);
+  }, [fetchEvent]);
 
   const memoizedInitialData = useMemo(() => {
     return event
@@ -119,7 +142,7 @@ export default function OrganizerEventDetailPage() {
       : {};
   }, [event]);
 
-  const handleUpdate = async (form: any) => {
+  const handleUpdate = async (form: EventFormData) => {
     if (!event) return;
     setSubmitting(true);
 
@@ -326,7 +349,7 @@ export default function OrganizerEventDetailPage() {
         </button>
       </div>
 
-      <ScheduleTimeline/>
+      <ScheduleTimeline />
 
       <ScheduleModal
         isOpen={showScheduleModal}

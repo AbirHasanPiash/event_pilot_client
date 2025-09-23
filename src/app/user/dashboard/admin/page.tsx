@@ -17,7 +17,6 @@ import {
   Users,
   CalendarDays,
   UserCheck,
-  ShieldAlert,
   ListOrdered,
 } from "lucide-react";
 import {
@@ -218,14 +217,14 @@ function buildLast5YearsSeries(trends: AdminDashboardResponse["trends"]) {
 const nf = new Intl.NumberFormat(undefined, { notation: "compact" });
 
 // Tooltip formatter for Recharts
-function tooltipFormatter(value: any) {
+function tooltipFormatter(value: string | number) {
   if (typeof value === "number") return nf.format(value);
-  return value;
+  return String(value);
 }
+
 
 // --- Component ---
 export default function AdminDashboardPage() {
-  const router = useRouter();
   const safeApiFetch = useSafeApiFetch();
 
   const [data, setData] = useState<AdminDashboardResponse | null>(null);
@@ -234,7 +233,7 @@ export default function AdminDashboardPage() {
   const [chartMode, setChartMode] = useState<"bar" | "line">("bar");
   const [metric, setMetric] = useState<"events" | "users" | "attendees">("events");
   const [timeframe, setTimeframe] = useState<"12m" | "5y">("12m");
-  const pollRef = useRef<NodeJS.Timeout | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [isDark, setIsDark] = useState(getIsDark());
 
   // observe theme changes in case your app toggles the `dark` class
@@ -269,8 +268,8 @@ export default function AdminDashboardPage() {
         writeToCache(res);
         if (showToast) toast.success("Dashboard refreshed");
       }
-    } catch (e) {
-      // handled by safeApiFetch
+    } catch {
+
     } finally {
       setLoading(false);
     }
@@ -289,14 +288,14 @@ export default function AdminDashboardPage() {
 
   // background polling
   useEffect(() => {
-    if (pollRef.current) clearInterval(pollRef.current as any);
-    pollRef.current = setInterval(() => {
-      fetchFresh(false);
-    }, POLL_MS);
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current as any);
-    };
-  }, [fetchFresh]);
+  if (pollRef.current) clearInterval(pollRef.current);
+  pollRef.current = setInterval(() => {
+    fetchFresh(false);
+  }, POLL_MS);
+  return () => {
+    if (pollRef.current) clearInterval(pollRef.current);
+  };
+}, [fetchFresh]);
 
   // derived chart data
   const last12m = useMemo(() => (data ? buildLast12MonthsSeries(data.trends) : []), [data]);

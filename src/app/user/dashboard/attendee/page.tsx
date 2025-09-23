@@ -83,7 +83,6 @@ function safeLocalSet<T>(key: string, value: { data: T; ts: number }) {
 
 
 function AvatarFallback({ title }: { title: string }) {
-  // small fallback pill when image absent
   return (
     <div className="w-full h-40 bg-gradient-to-b from-gray-50 to-white dark:from-gray-800 dark:to-gray-900 flex items-center justify-center text-gray-400 dark:text-gray-500">
       <div className="text-sm">{title}</div>
@@ -129,9 +128,7 @@ function EventCard({ event, onOpen }: { event: EventItem; onOpen: (id: number) =
             priority={false}
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gray-100 dark:bg-gray-800">
-            <span className="text-sm text-gray-400">No Image</span>
-          </div>
+          <AvatarFallback title={event.title} />
         )}
 
         {/* Category (prevent overlap with Private) */}
@@ -244,9 +241,8 @@ export default function UserDashboardPage() {
       if (showToast) {
         // use toast if you want: toast.success("Refreshed");
       }
-    } catch (err: any) {
+    } catch {
       setError("Failed to load dashboard");
-      // safeApiFetch already shows toast for auth issues; do not double toast
     } finally {
       setLoading(false);
     }

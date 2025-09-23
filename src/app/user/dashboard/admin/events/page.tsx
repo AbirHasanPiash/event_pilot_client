@@ -105,14 +105,30 @@ export default function AdminEventsPage() {
     allow_waitlist: false,
   };
 
+  const EMPTY_EVENT_DATA: EventFormData = {
+    title: "",
+    description: "",
+    category: null,
+    tags: [],
+    image: null,
+    start_time: "",
+    end_time: "",
+    venue: "",
+    location_map_url: "",
+    visibility: "public",
+    status: "draft",
+    capacity: 0,
+    allow_waitlist: false,
+  };
+
   const memoizedInitialData = useMemo(() => {
     return editingEvent
       ? {
           ...editingEvent,
-          image: null, // File input starts empty
+          image: null,
           existingImage: editingEvent?.image || null,
         }
-      : emptyEventData;
+      : EMPTY_EVENT_DATA;
   }, [editingEvent]);
 
   // Load events
@@ -144,34 +160,33 @@ export default function AdminEventsPage() {
   );
 
   // Initial load on mount
-useEffect(() => {
-  loadEvents(initialSearch, initialDateFilter, initialPage);
-}, []);
+  useEffect(() => {
+    loadEvents(initialSearch, initialDateFilter, initialPage);
+  }, [initialSearch, initialDateFilter, initialPage, loadEvents]);
 
-// Debounced load on filter/page change
-useEffect(() => {
-  const delay = setTimeout(() => {
-    const params = new URLSearchParams(Array.from(searchParams.entries()));
+  // Debounced load on filter/page change
+  useEffect(() => {
+    const delay = setTimeout(() => {
+      const params = new URLSearchParams(Array.from(searchParams.entries()));
 
-    if (searchTerm) params.set("search", searchTerm);
-    else params.delete("search");
+      if (searchTerm) params.set("search", searchTerm);
+      else params.delete("search");
 
-    if (dateFilter) params.set("date_filter", dateFilter);
-    else params.delete("date_filter");
+      if (dateFilter) params.set("date_filter", dateFilter);
+      else params.delete("date_filter");
 
-    if (currentPage !== 1) {
-      params.set("page", String(currentPage));
-    } else {
-      params.delete("page");
-    }
+      if (currentPage !== 1) {
+        params.set("page", String(currentPage));
+      } else {
+        params.delete("page");
+      }
 
-    router.replace(`/user/dashboard/admin/events?${params.toString()}`);
-    loadEvents(searchTerm, dateFilter, currentPage);
-  }, 500);
+      router.replace(`/user/dashboard/admin/events?${params.toString()}`);
+      loadEvents(searchTerm, dateFilter, currentPage);
+    }, 500);
 
-  return () => clearTimeout(delay);
-}, [searchTerm, dateFilter, currentPage, loadEvents, router]);
-
+    return () => clearTimeout(delay);
+  }, [searchTerm, dateFilter, currentPage, loadEvents, router, searchParams]);
 
   const goToPage = (newPage: number) => {
     const params = new URLSearchParams(Array.from(searchParams.entries()));
@@ -213,7 +228,6 @@ useEffect(() => {
 
     router.replace(`/user/dashboard/admin/events?${params.toString()}`);
   };
-
 
   // Handle Create / Update
   const handleFormSubmit = async (form: EventFormData) => {

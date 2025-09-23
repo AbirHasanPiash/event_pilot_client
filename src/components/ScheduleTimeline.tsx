@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, usePathname } from "next/navigation";
 import { useSafeApiFetch } from "@/lib/apiWrapper";
 import { Calendar, Clock, Pencil, Trash2 } from "lucide-react";
@@ -12,7 +12,6 @@ import LoadingSpinner from "@/components/LoadingSpinner";
 import ScheduleModal from "@/components/ScheduleModal";
 import ConfirmModal from "@/components/ConfirmModal";
 import { toast } from "react-hot-toast";
-import { useAuth } from "@/context/AuthContext";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -30,10 +29,10 @@ export default function ScheduleTimeline() {
   const { id: eventId } = useParams();
   const safeApiFetch = useSafeApiFetch();
   const pathname = usePathname();
-  const { user } = useAuth();
-
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [loading, setLoading] = useState(true);
+  type ScheduleInput = Omit<Schedule, "id" | "event">;
+
 
   // Modal state
   const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
@@ -59,7 +58,7 @@ export default function ScheduleTimeline() {
     return d;
   }
 
-  const fetchSchedules = async () => {
+  const fetchSchedules = useCallback(async () => {
     if (!eventId) return;
     const data = await safeApiFetch<{ results: Schedule[] }>(
       `/api/events/${eventId}/schedules/`
@@ -73,14 +72,14 @@ export default function ScheduleTimeline() {
       setSchedules(sorted);
     }
     setLoading(false);
-  };
+  }, [eventId, safeApiFetch]);
 
   useEffect(() => {
     fetchSchedules();
-  }, [eventId]);
+  }, [fetchSchedules]);
 
-  // ✅ Create or update handler
-  const handleSaveSchedule = async (updates: any[]) => {
+  // Create or update handler
+  const handleSaveSchedule = async (updates: ScheduleInput[]) => {
     const update = updates[0];
     if (editingSchedule) {
       // update
@@ -102,14 +101,11 @@ export default function ScheduleTimeline() {
       }
     } else {
       // create new
-      const result = await safeApiFetch(
-        `/api/events/${eventId}/schedules/`,
-        {
-          method: "POST",
-          body: JSON.stringify(update),
-          headers: { "Content-Type": "application/json" },
-        }
-      );
+      const result = await safeApiFetch(`/api/events/${eventId}/schedules/`, {
+        method: "POST",
+        body: JSON.stringify(update),
+        headers: { "Content-Type": "application/json" },
+      });
       if (result) {
         toast.success("Schedule created successfully");
         setShowScheduleModal(false);

@@ -6,9 +6,7 @@ import { useState } from "react";
 import { toast } from "react-hot-toast";
 import { useSafeApiFetch } from "@/lib/apiWrapper";
 import { useAuth } from "@/context/AuthContext";
-import { log } from "console";
 import Link from "next/link";
-
 
 type ResetData = {
   new_password: string;
@@ -50,9 +48,13 @@ export default function ResetPasswordConfirmPage() {
       toast.success("Password reset successful!");
       logout();
       router.push("/auth/login");
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Reset failed:", err);
-      setServerError(err.message || "Invalid or expired reset link.");
+      if (err instanceof Error) {
+        setServerError(err.message);
+      } else {
+        setServerError("Invalid or expired reset link.");
+      }
     }
   };
 
@@ -77,7 +79,9 @@ export default function ResetPasswordConfirmPage() {
               focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-800 dark:text-white"
             />
             {errors.new_password && (
-              <p className="text-sm text-red-600">{errors.new_password.message}</p>
+              <p className="text-sm text-red-600">
+                {errors.new_password.message}
+              </p>
             )}
           </div>
 
@@ -93,7 +97,9 @@ export default function ResetPasswordConfirmPage() {
               className="w-full px-4 py-2 bg-gray-200 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-800 dark:text-white"
             />
             {errors.re_new_password && (
-              <p className="text-sm text-red-600">{errors.re_new_password.message}</p>
+              <p className="text-sm text-red-600">
+                {errors.re_new_password.message}
+              </p>
             )}
           </div>
 
@@ -113,7 +119,10 @@ export default function ResetPasswordConfirmPage() {
 
           <p className="text-sm text-center text-gray-600 mt-4">
             Already reset?{" "}
-            <Link href="/auth/login" className="text-indigo-600 hover:underline">
+            <Link
+              href="/auth/login"
+              className="text-indigo-600 hover:underline"
+            >
               Back to login
             </Link>
           </p>
