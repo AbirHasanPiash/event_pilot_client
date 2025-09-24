@@ -7,6 +7,7 @@ import Footer from "@/components/Footer";
 import AuthProvider from "@/context/AuthContext";
 import { Toaster } from "react-hot-toast";
 import { ThemeProvider } from "@/components/theme-provider";
+import { SWRProvider } from "@/lib/swrConfig";
 
 // Load Inter font with Tailwind CSS variable
 const inter = Inter({
@@ -53,7 +54,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning className={`${inter.variable} scroll-smooth`}>
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${inter.variable} scroll-smooth`}
+    >
       <body className="min-h-screen bg-white text-gray-900 antialiased">
         <ThemeProvider
           attribute="class"
@@ -61,14 +66,16 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <AuthProvider>
-            <Toaster position="top-right" />
-            <main className="flex flex-col min-h-screen">
-              <Navbar />
-              <div className="flex-grow">{children}</div>
-              <Footer />
-            </main>
-          </AuthProvider>
+          <SWRProvider>
+            <AuthProvider>
+              <Toaster position="top-right" />
+              <main className="flex flex-col min-h-screen">
+                <Navbar />
+                <div className="flex-grow">{children}</div>
+                <Footer />
+              </main>
+            </AuthProvider>
+          </SWRProvider>
         </ThemeProvider>
       </body>
     </html>

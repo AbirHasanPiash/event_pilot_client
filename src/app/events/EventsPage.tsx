@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
+import useSWR from "swr";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
@@ -16,6 +17,7 @@ import {
   Clock,
   Calendar,
 } from "lucide-react";
+import toast from "react-hot-toast";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -38,6 +40,7 @@ interface Event {
   start_time: string;
   end_time: string;
   venue: string;
+  status?: string;
 }
 
 const DATE_FILTERS = [
@@ -53,14 +56,7 @@ export default function EventsPage() {
   const searchParams = useSearchParams();
   const safeApiFetch = useSafeApiFetch();
 
-  // State
-  const [events, setEvents] = useState<Event[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [count, setCount] = useState<number | null>(null);
-  const [nextUrl, setNextUrl] = useState<string | null>(null);
-  const [prevUrl, setPrevUrl] = useState<string | null>(null);
-
-  // Query state (URL-synced)
+  // URL state
   const initialSearch = searchParams.get("search") || "";
   const initialFilter = searchParams.get("date_filter") || "";
   const initialPage = Number(searchParams.get("page") || 1);
@@ -69,73 +65,79 @@ export default function EventsPage() {
   const [dateFilter, setDateFilter] = useState(initialFilter);
   const [page, setPage] = useState<number>(initialPage);
 
-  // Debounce search input locally
+  // Debounce search input
   const [debouncedSearch, setDebouncedSearch] = useState(searchTerm);
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchTerm), 450);
     return () => clearTimeout(t);
   }, [searchTerm]);
 
-  // Build query string helper
+  // Build query string
   const buildQuery = useCallback(
     (pageNum = page, filter = dateFilter, search = debouncedSearch) => {
       const params = new URLSearchParams();
       if (filter) params.set("date_filter", filter);
       if (search) params.set("search", search);
-      if (pageNum && pageNum > 1) params.set("page", String(pageNum));
+      if (pageNum > 1) params.set("page", String(pageNum));
       return params.toString();
     },
     [dateFilter, debouncedSearch, page]
   );
 
-  // Load events from API (supports pagination)
-  const loadEvents = useCallback(
-    async (pageNum = 1, filter = dateFilter, search = debouncedSearch) => {
-      setLoading(true);
-      try {
-        const qs = buildQuery(pageNum, filter, search);
-        const endpoint = `/api/events/?${qs}`;
-        const data = await safeApiFetch<PaginatedResponse<Event>>(endpoint);
-
-        setEvents(data?.results || []);
-        setCount(data?.count ?? null);
-        setNextUrl(data?.next ?? null);
-        setPrevUrl(data?.previous ?? null);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [safeApiFetch, buildQuery, dateFilter, debouncedSearch]
+  // SWR key
+  const swrKey = useMemo(
+    () => `/api/events/?${buildQuery(page)}`,
+    [page, buildQuery]
   );
 
-  // Sync URL and load on filter/search/page changes
-  useEffect(() => {
-    const qs = buildQuery(page, dateFilter, debouncedSearch);
-    router.replace(`/events?${qs}`);
-    loadEvents(page, dateFilter, debouncedSearch);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, dateFilter, debouncedSearch]);
+  // SWR fetcher
+  const fetcher = useCallback(
+    (url: string) => safeApiFetch<PaginatedResponse<Event>>(url),
+    [safeApiFetch]
+  );
 
-  // Reset to first page when filter/search changes
+  // SWR hook
+  const { data, error, isLoading } = useSWR<PaginatedResponse<Event> | null>(
+  swrKey,
+  fetcher
+);
+
+
+  useEffect(() => {
+  if (error instanceof Error) {
+    toast.error(error.message);
+  }
+}, [error]);
+
+  // Sync URL when state changes
+  useEffect(() => {
+    const qs = buildQuery(page);
+    router.replace(`/events?${qs}`);
+  }, [page, dateFilter, debouncedSearch, router, buildQuery]);
+
+  // Reset page when filter/search changes
   useEffect(() => {
     setPage(1);
   }, [dateFilter, debouncedSearch]);
 
-  // Memoized summary text
-  const resultSummary = useMemo(() => {
-    if (loading) return "Searching...";
-    if (count === 0) return "No events found";
-    if (count === 1) return "1 event found";
-    return `${count ?? "—"} events`;
-  }, [count, loading]);
+  // Events (filter out drafts)
+  const events = useMemo(
+    () => (data?.results || []).filter((e) => e.status !== "draft"),
+    [data]
+  );
 
-  // Pagination handlers
+  // Summary text
+  const resultSummary = useMemo(() => {
+    if (isLoading) return "Searching...";
+    if (!data || events.length === 0) return "No events found";
+    if (events.length === 1) return "1 event found";
+    return `${data.count ?? "—"} events`;
+  }, [data, events, isLoading]);
+
+  // Pagination
   const goNext = () => {
-    if (nextUrl) {
-      const url = new URL(
-        nextUrl,
-        typeof window !== "undefined" ? window.location.origin : undefined
-      );
+    if (data?.next) {
+      const url = new URL(data.next, window.location.origin);
       const p = Number(url.searchParams.get("page") || page + 1);
       setPage(p);
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -143,11 +145,8 @@ export default function EventsPage() {
   };
 
   const goPrev = () => {
-    if (prevUrl) {
-      const url = new URL(
-        prevUrl,
-        typeof window !== "undefined" ? window.location.origin : undefined
-      );
+    if (data?.previous) {
+      const url = new URL(data.previous, window.location.origin);
       const p = Number(url.searchParams.get("page") || Math.max(1, page - 1));
       setPage(p);
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -182,13 +181,12 @@ export default function EventsPage() {
                   <button
                     key={f.key || "all"}
                     onClick={() => setDateFilter(f.key)}
-                    className={`inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-full transition-shadow border ${
+                    className={`inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-full border ${
                       active
                         ? "bg-indigo-600 text-white border-indigo-600 shadow-md"
                         : "bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:shadow-sm hover:bg-indigo-50 dark:hover:bg-white/5"
                     }`}
                     aria-pressed={active}
-                    title={f.label}
                   >
                     <Icon
                       size={14}
@@ -212,39 +210,16 @@ export default function EventsPage() {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-3 py-2 text-sm border rounded-lg bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                aria-label="Search events"
               />
             </div>
           </div>
         </div>
 
-        {/* Mobile filter strip */}
-        <div className="sm:hidden mb-4">
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {DATE_FILTERS.map((f) => {
-              const active = dateFilter === f.key;
-              return (
-                <button
-                  key={f.key || "all-mobile"}
-                  onClick={() => setDateFilter(f.key)}
-                  className={`flex-shrink-0 px-3 py-1.5 text-sm rounded-full border ${
-                    active
-                      ? "bg-indigo-600 text-white border-indigo-600"
-                      : "bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-700"
-                  }`}
-                >
-                  {f.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Grid layout */}
+        {/* Events grid */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* Main list */}
           <div className="lg:col-span-3">
-            {loading ? (
+            {isLoading ? (
               <div className="flex items-center justify-center py-24">
                 <LoadingSpinner />
               </div>
@@ -264,8 +239,6 @@ export default function EventsPage() {
                     key={event.id}
                     onClick={() => router.push(`/events/${event.id}`)}
                     className="group cursor-pointer rounded-2xl overflow-hidden shadow-[0_6px_18px_rgba(15,23,42,0.06)] dark:shadow-none border border-gray-100 dark:border-gray-800 bg-gradient-to-b from-white to-white/90 dark:from-gray-900 dark:to-gray-900/95 hover:scale-[1.01] transition-transform duration-200"
-                    role="link"
-                    aria-label={`Open event ${event.title}`}
                   >
                     <div className="relative h-44 w-full">
                       <Image
@@ -278,7 +251,6 @@ export default function EventsPage() {
                         {event.category?.name ?? "General"}
                       </div>
                     </div>
-
                     <div className="p-4 flex flex-col gap-3">
                       <div className="flex justify-between items-start gap-3">
                         <div className="min-w-0">
@@ -296,7 +268,6 @@ export default function EventsPage() {
                           </div>
                         </div>
                       </div>
-
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex flex-wrap gap-2">
                           {event.tags.slice(0, 4).map((t) => (
@@ -308,7 +279,6 @@ export default function EventsPage() {
                             </span>
                           ))}
                         </div>
-
                         <div className="text-xs text-gray-500 dark:text-gray-400">
                           {event.venue}
                         </div>
@@ -325,21 +295,20 @@ export default function EventsPage() {
                 <div className="text-sm text-gray-600 dark:text-gray-400">
                   Page <span className="font-medium">{page}</span> — showing{" "}
                   <span className="font-medium">{events.length}</span> of{" "}
-                  <span className="font-medium">{count ?? "—"}</span> events
+                  <span className="font-medium">{data?.count ?? "—"}</span>{" "}
+                  events
                 </div>
-
                 <div className="flex items-center gap-2">
                   <button
                     onClick={goPrev}
-                    disabled={!prevUrl || loading}
+                    disabled={!data?.previous || isLoading}
                     className="inline-flex items-center gap-2 px-3 py-2 rounded-md border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-sm disabled:opacity-50"
                   >
                     <ChevronLeft size={16} /> Prev
                   </button>
-
                   <button
                     onClick={goNext}
-                    disabled={!nextUrl || loading}
+                    disabled={!data?.next || isLoading}
                     className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-indigo-600 text-white text-sm hover:bg-indigo-700 disabled:opacity-50"
                   >
                     Next <ChevronRight size={16} />

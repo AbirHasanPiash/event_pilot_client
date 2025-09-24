@@ -18,12 +18,7 @@ import {
   UserCheck,
   ListOrdered,
 } from "lucide-react";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   ResponsiveContainer,
@@ -47,16 +42,46 @@ dayjs.extend(timezone);
 dayjs.extend(relativeTime);
 
 // --- Types that match your backend response ---
-interface RoleBreakdown { role: string; count: number }
-interface StatusBreakdown { status: string; count: number }
-interface CategoryBreakdown { name: string; count: number }
+interface RoleBreakdown {
+  role: string;
+  count: number;
+}
+interface StatusBreakdown {
+  status: string;
+  count: number;
+}
+interface CategoryBreakdown {
+  name: string;
+  count: number;
+}
 
-interface MonthDatum { month: string; year: number; count: number }
-interface YearDatum { year: number; count: number }
+interface MonthDatum {
+  month: string;
+  year: number;
+  count: number;
+}
+interface YearDatum {
+  year: number;
+  count: number;
+}
 
-interface TopEvent { id: number; title: string; attendee_count: number }
-interface TopOrganizerByEvents { id: number; first_name: string; last_name: string; events_count: number }
-interface TopOrganizerByAttendees { id: number; first_name: string; last_name: string; attendee_count: number }
+interface TopEvent {
+  id: number;
+  title: string;
+  attendee_count: number;
+}
+interface TopOrganizerByEvents {
+  id: number;
+  first_name: string;
+  last_name: string;
+  events_count: number;
+}
+interface TopOrganizerByAttendees {
+  id: number;
+  first_name: string;
+  last_name: string;
+  attendee_count: number;
+}
 
 interface AdminDashboardResponse {
   totals: { users: number; events: number; attendees: number };
@@ -135,7 +160,9 @@ function getIsDark() {
   return document.documentElement.classList.contains("dark");
 }
 
-function safeLocalStorageGet<T>(key: string): { data: T; timestamp: number } | null {
+function safeLocalStorageGet<T>(
+  key: string
+): { data: T; timestamp: number } | null {
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return null;
@@ -145,7 +172,10 @@ function safeLocalStorageGet<T>(key: string): { data: T; timestamp: number } | n
   }
 }
 
-function safeLocalStorageSet<T>(key: string, value: { data: T; timestamp: number }) {
+function safeLocalStorageSet<T>(
+  key: string,
+  value: { data: T; timestamp: number }
+) {
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {
@@ -157,7 +187,13 @@ function safeLocalStorageSet<T>(key: string, value: { data: T; timestamp: number
 function buildLast12MonthsSeries(trends: AdminDashboardResponse["trends"]) {
   const now = dayjs();
   const labels: string[] = [];
-  const points: Array<{ label: string; key: string; users: number; events: number; attendees: number }> = [];
+  const points: Array<{
+    label: string;
+    key: string;
+    users: number;
+    events: number;
+    attendees: number;
+  }> = [];
 
   for (let i = 11; i >= 0; i--) {
     const d = now.subtract(i, "month");
@@ -196,7 +232,13 @@ function buildLast12MonthsSeries(trends: AdminDashboardResponse["trends"]) {
 function buildLast5YearsSeries(trends: AdminDashboardResponse["trends"]) {
   const thisYear = dayjs().year();
   const years = Array.from({ length: 5 }, (_, i) => thisYear - 4 + i);
-  const base = years.map((y) => ({ label: String(y), year: y, users: 0, events: 0, attendees: 0 }));
+  const base = years.map((y) => ({
+    label: String(y),
+    year: y,
+    users: 0,
+    events: 0,
+    attendees: 0,
+  }));
   const byYear = Object.fromEntries(base.map((b) => [b.year, b]));
 
   (trends.yearly.users || []).forEach((y) => {
@@ -221,7 +263,6 @@ function tooltipFormatter(value: string | number) {
   return String(value);
 }
 
-
 // --- Component ---
 export default function AdminDashboardPage() {
   const safeApiFetch = useSafeApiFetch();
@@ -230,15 +271,21 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [chartMode, setChartMode] = useState<"bar" | "line">("bar");
-  const [metric, setMetric] = useState<"events" | "users" | "attendees">("events");
+  const [metric, setMetric] = useState<"events" | "users" | "attendees">(
+    "events"
+  );
   const [timeframe, setTimeframe] = useState<"12m" | "5y">("12m");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [isDark, setIsDark] = useState(getIsDark());
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
 
   // observe theme changes in case your app toggles the `dark` class
   useEffect(() => {
     const observer = new MutationObserver(() => setIsDark(getIsDark()));
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
     return () => observer.disconnect();
   }, []);
 
@@ -260,24 +307,28 @@ export default function AdminDashboardPage() {
     setLastUpdated(payload.timestamp);
   }, []);
 
-  const fetchFresh = useCallback(async (showToast = false) => {
-    try {
-      const res = await safeApiFetch<AdminDashboardResponse>("/api/dashboard/admin");
-      if (res) {
-        writeToCache(res);
-        if (showToast) toast.success("Dashboard refreshed");
+  const fetchFresh = useCallback(
+    async (showToast = false) => {
+      try {
+        const res = await safeApiFetch<AdminDashboardResponse>(
+          "/api/dashboard/admin"
+        );
+        if (res) {
+          writeToCache(res);
+          if (showToast) toast.success("Dashboard refreshed");
+        }
+      } catch {
+      } finally {
+        setLoading(false);
       }
-    } catch {
-
-    } finally {
-      setLoading(false);
-    }
-  }, [safeApiFetch, writeToCache]);
+    },
+    [safeApiFetch, writeToCache]
+  );
 
   // initial load: show cache immediately, then revalidate if stale
   useEffect(() => {
     const cached = readFromCache();
-    const isStale = !cached || (Date.now() - cached.timestamp > REVALIDATE_MS);
+    const isStale = !cached || Date.now() - cached.timestamp > REVALIDATE_MS;
     if (isStale) {
       fetchFresh(false);
     } else {
@@ -287,35 +338,78 @@ export default function AdminDashboardPage() {
 
   // background polling
   useEffect(() => {
-  if (pollRef.current) clearInterval(pollRef.current);
-  pollRef.current = setInterval(() => {
-    fetchFresh(false);
-  }, POLL_MS);
-  return () => {
     if (pollRef.current) clearInterval(pollRef.current);
-  };
-}, [fetchFresh]);
+    pollRef.current = setInterval(() => {
+      fetchFresh(false);
+    }, POLL_MS);
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [fetchFresh]);
 
   // derived chart data
-  const last12m = useMemo(() => (data ? buildLast12MonthsSeries(data.trends) : []), [data]);
-  const last5y = useMemo(() => (data ? buildLast5YearsSeries(data.trends) : []), [data]);
-  const chartData = timeframe === "12m" ? last12m : last5y;
+  const last12m = useMemo(
+    () => (data ? buildLast12MonthsSeries(data.trends) : []),
+    [data]
+  );
+  const last5y = useMemo(
+    () => (data ? buildLast5YearsSeries(data.trends) : []),
+    [data]
+  );
+  const chartData = useMemo(() => {
+    if (timeframe === "12m") {
+      if (windowWidth < 768) {
+        return last12m.slice(-3); // Last 3 months
+      } else if (windowWidth >= 768 && windowWidth < 1024) {
+        return last12m.slice(-6); // Last 6 months
+      } else {
+        return last12m; // Full 12 months
+      }
+    }
+    if (timeframe === "5y") {
+      if (windowWidth < 768) {
+        return last5y.slice(-3); // Last 3 years
+      } else {
+        return last5y; // Full 5 years
+      }
+    }
+    return [];
+  }, [last12m, last5y, timeframe, windowWidth]);
 
   const axisColor = isDark ? AXIS_COLOR_DARK : AXIS_COLOR_LIGHT;
   const gridColor = isDark ? GRID_COLOR_DARK : GRID_COLOR_LIGHT;
 
   const metricLabel = metric[0].toUpperCase() + metric.slice(1);
 
+  // Update the windowWidth state when the window is resized
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowWidth(window.innerWidth);
+    };
+
+    window.addEventListener("resize", handleResize);
+
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
   return (
     <div className="max-w-7xl mx-auto p-6 space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Admin Dashboard</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Overview of users, events, attendees & system health.</p>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
+            Admin Dashboard
+          </h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Overview of users, events, attendees & system health.
+          </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => fetchFresh(true)} className="gap-2">
+          <Button
+            variant="outline"
+            onClick={() => fetchFresh(true)}
+            className="gap-2"
+          >
             <RefreshCw className="h-4 w-4" /> Refresh
           </Button>
           {lastUpdated && (
@@ -360,34 +454,58 @@ export default function AdminDashboardPage() {
             <div className="isolate inline-flex rounded-lg shadow-sm border border-gray-200 dark:border-white/10">
               <button
                 onClick={() => setTimeframe("12m")}
-                className={`px-3 py-1.5 text-sm rounded-l-lg ${timeframe === "12m" ? "bg-indigo-600 text-white" : "hover:bg-gray-100 dark:hover:bg-white/10"}`}
+                className={`px-3 py-1.5 text-sm rounded-l-lg ${
+                  timeframe === "12m"
+                    ? "bg-indigo-600 text-white"
+                    : "hover:bg-gray-100 dark:hover:bg-white/10"
+                }`}
               >
-                Last 12 months
+                {windowWidth < 768
+                  ? "Last 3 months"
+                  : windowWidth >= 768 && windowWidth < 1024
+                  ? "Last 6 months"
+                  : "Last 12 months"}
               </button>
               <button
                 onClick={() => setTimeframe("5y")}
-                className={`px-3 py-1.5 text-sm rounded-r-lg ${timeframe === "5y" ? "bg-indigo-600 text-white" : "hover:bg-gray-100 dark:hover:bg-white/10"}`}
+                className={`px-3 py-1.5 text-sm rounded-r-lg ${
+                  timeframe === "5y"
+                    ? "bg-indigo-600 text-white"
+                    : "hover:bg-gray-100 dark:hover:bg-white/10"
+                }`}
               >
-                Last 5 years
+                {windowWidth < 768 ? "Last 3 years" : "Last 5 years"}
               </button>
             </div>
 
             <div className="isolate inline-flex rounded-lg shadow-sm border border-gray-200 dark:border-white/10">
               <button
                 onClick={() => setMetric("events")}
-                className={`px-3 py-1.5 text-sm ${metric === "events" ? "bg-emerald-600 text-white" : "hover:bg-gray-100 dark:hover:bg-white/10"}`}
+                className={`px-3 py-1.5 text-sm ${
+                  metric === "events"
+                    ? "bg-emerald-600 text-white"
+                    : "hover:bg-gray-100 dark:hover:bg-white/10"
+                }`}
               >
                 Events
               </button>
               <button
                 onClick={() => setMetric("users")}
-                className={`px-3 py-1.5 text-sm ${metric === "users" ? "bg-indigo-600 text-white" : "hover:bg-gray-100 dark:hover:bg-white/10"}`}
+                className={`px-3 py-1.5 text-sm ${
+                  metric === "users"
+                    ? "bg-indigo-600 text-white"
+                    : "hover:bg-gray-100 dark:hover:bg-white/10"
+                }`}
               >
                 Users
               </button>
               <button
                 onClick={() => setMetric("attendees")}
-                className={`px-3 py-1.5 text-sm rounded-r-lg ${metric === "attendees" ? "bg-amber-600 text-white" : "hover:bg-gray-100 dark:hover:bg-white/10"}`}
+                className={`px-3 py-1.5 text-sm rounded-r-lg ${
+                  metric === "attendees"
+                    ? "bg-amber-600 text-white"
+                    : "hover:bg-gray-100 dark:hover:bg-white/10"
+                }`}
               >
                 Attendees
               </button>
@@ -396,13 +514,21 @@ export default function AdminDashboardPage() {
             <div className="isolate inline-flex rounded-lg shadow-sm border border-gray-200 dark:border-white/10">
               <button
                 onClick={() => setChartMode("bar")}
-                className={`px-3 py-1.5 text-sm flex items-center gap-1 rounded-l-lg ${chartMode === "bar" ? "bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900" : "hover:bg-gray-100 dark:hover:bg-white/10"}`}
+                className={`px-3 py-1.5 text-sm flex items-center gap-1 rounded-l-lg ${
+                  chartMode === "bar"
+                    ? "bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900"
+                    : "hover:bg-gray-100 dark:hover:bg-white/10"
+                }`}
               >
                 <BarChartIcon className="h-4 w-4" /> Bar
               </button>
               <button
                 onClick={() => setChartMode("line")}
-                className={`px-3 py-1.5 text-sm flex items-center gap-1 rounded-r-lg ${chartMode === "line" ? "bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900" : "hover:bg-gray-100 dark:hover:bg-white/10"}`}
+                className={`px-3 py-1.5 text-sm flex items-center gap-1 rounded-r-lg ${
+                  chartMode === "line"
+                    ? "bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900"
+                    : "hover:bg-gray-100 dark:hover:bg-white/10"
+                }`}
               >
                 <LineChartIcon className="h-4 w-4" /> Line
               </button>
@@ -411,26 +537,58 @@ export default function AdminDashboardPage() {
         </CardHeader>
         <CardContent className="h-[340px]">
           {loading ? (
-            <div className="h-full flex items-center justify-center"><LoadingSpinner /></div>
+            <div className="h-full flex items-center justify-center">
+              <LoadingSpinner />
+            </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               {chartMode === "bar" ? (
-                <BarChart data={chartData} margin={{ left: 12, right: 12, top: 8 }}>
+                <BarChart
+                  data={chartData}
+                  margin={{ left: 12, right: 12, top: 8 }}
+                >
                   <CartesianGrid stroke={gridColor} strokeDasharray="3 3" />
-                  <XAxis dataKey="label" stroke={axisColor} interval={chartData.length > 12 ? 0 : 0} angle={0} height={40} tick={{ fill: axisColor }} />
+                  <XAxis
+                    dataKey="label"
+                    stroke={axisColor}
+                    interval={chartData.length > 12 ? 0 : 0}
+                    angle={-45}
+                    height={50}
+                    tick={{ fill: axisColor, dy: 15 }}
+                  />
                   <YAxis stroke={axisColor} tick={{ fill: axisColor }} />
                   <Tooltip formatter={tooltipFormatter} />
                   <Legend />
-                  <Bar dataKey={metric} name={metricLabel} fill={SERIES_COLORS[metric]} radius={[6, 6, 0, 0]} />
+                  <Bar
+                    dataKey={metric}
+                    name={metricLabel}
+                    fill={SERIES_COLORS[metric]}
+                    radius={[6, 6, 0, 0]}
+                  />
                 </BarChart>
               ) : (
-                <LineChart data={chartData} margin={{ left: 12, right: 12, top: 8 }}>
+                <LineChart
+                  data={chartData}
+                  margin={{ left: 12, right: 12, top: 8 }}
+                >
                   <CartesianGrid stroke={gridColor} strokeDasharray="3 3" />
-                  <XAxis dataKey="label" stroke={axisColor} height={40} tick={{ fill: axisColor }} />
+                  <XAxis
+                    dataKey="label"
+                    stroke={axisColor}
+                    height={40}
+                    tick={{ fill: axisColor }}
+                  />
                   <YAxis stroke={axisColor} tick={{ fill: axisColor }} />
                   <Tooltip formatter={tooltipFormatter} />
                   <Legend />
-                  <Line type="monotone" dataKey={metric} name={metricLabel} stroke={SERIES_COLORS[metric]} strokeWidth={3} dot={false} />
+                  <Line
+                    type="monotone"
+                    dataKey={metric}
+                    name={metricLabel}
+                    stroke={SERIES_COLORS[metric]}
+                    strokeWidth={3}
+                    dot={false}
+                  />
                 </LineChart>
               )}
             </ResponsiveContainer>
@@ -446,9 +604,16 @@ export default function AdminDashboardPage() {
           </CardHeader>
           <CardContent className="h-[260px]">
             {loading ? (
-              <div className="h-full flex items-center justify-center"><LoadingSpinner /></div>
+              <div className="h-full flex items-center justify-center">
+                <LoadingSpinner />
+              </div>
             ) : (
-              <Donut data={(data?.breakdowns.users_by_role ?? []).map((d) => ({ name: d.role, value: d.count }))} />
+              <Donut
+                data={(data?.breakdowns.users_by_role ?? []).map((d) => ({
+                  name: d.role,
+                  value: d.count,
+                }))}
+              />
             )}
           </CardContent>
         </Card>
@@ -458,9 +623,16 @@ export default function AdminDashboardPage() {
           </CardHeader>
           <CardContent className="h-[260px]">
             {loading ? (
-              <div className="h-full flex items-center justify-center"><LoadingSpinner /></div>
+              <div className="h-full flex items-center justify-center">
+                <LoadingSpinner />
+              </div>
             ) : (
-              <Donut data={(data?.breakdowns.events_by_status ?? []).map((d) => ({ name: d.status, value: d.count }))} />
+              <Donut
+                data={(data?.breakdowns.events_by_status ?? []).map((d) => ({
+                  name: d.status,
+                  value: d.count,
+                }))}
+              />
             )}
           </CardContent>
         </Card>
@@ -470,13 +642,43 @@ export default function AdminDashboardPage() {
           </CardHeader>
           <CardContent>
             {loading ? (
-              <div className="py-8 flex justify-center"><LoadingSpinner /></div>
+              <div className="py-8 flex justify-center">
+                <LoadingSpinner />
+              </div>
             ) : (
               <ul className="space-y-2 text-sm">
-                <li className="flex items-center justify-between"><span className="text-gray-500 dark:text-gray-400">Draft events</span><span className="font-medium">{data?.system_health.draft_events ?? 0}</span></li>
-                <li className="flex items-center justify-between"><span className="text-gray-500 dark:text-gray-400">Cancelled events</span><span className="font-medium">{data?.system_health.cancelled_events ?? 0}</span></li>
-                <li className="flex items-center justify-between"><span className="text-gray-500 dark:text-gray-400">Waitlist enabled</span><span className="font-medium">{data?.system_health.waitlist_enabled ?? 0}</span></li>
-                <li className="flex items-center justify-between"><span className="text-gray-500 dark:text-gray-400">Full events</span><span className="font-medium">{data?.system_health.full_events ?? 0}</span></li>
+                <li className="flex items-center justify-between">
+                  <span className="text-gray-500 dark:text-gray-400">
+                    Draft events
+                  </span>
+                  <span className="font-medium">
+                    {data?.system_health.draft_events ?? 0}
+                  </span>
+                </li>
+                <li className="flex items-center justify-between">
+                  <span className="text-gray-500 dark:text-gray-400">
+                    Cancelled events
+                  </span>
+                  <span className="font-medium">
+                    {data?.system_health.cancelled_events ?? 0}
+                  </span>
+                </li>
+                <li className="flex items-center justify-between">
+                  <span className="text-gray-500 dark:text-gray-400">
+                    Waitlist enabled
+                  </span>
+                  <span className="font-medium">
+                    {data?.system_health.waitlist_enabled ?? 0}
+                  </span>
+                </li>
+                <li className="flex items-center justify-between">
+                  <span className="text-gray-500 dark:text-gray-400">
+                    Full events
+                  </span>
+                  <span className="font-medium">
+                    {data?.system_health.full_events ?? 0}
+                  </span>
+                </li>
               </ul>
             )}
           </CardContent>
@@ -487,17 +689,31 @@ export default function AdminDashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Top Events by Attendance</CardTitle>
+            <CardTitle className="text-base">
+              Top Events by Attendance
+            </CardTitle>
           </CardHeader>
           <CardContent>
             {loading ? (
-              <div className="py-8 flex justify-center"><LoadingSpinner /></div>
+              <div className="py-8 flex justify-center">
+                <LoadingSpinner />
+              </div>
             ) : (
               <ol className="space-y-2">
                 {(data?.rankings.top_events_by_attendance ?? []).map((e, i) => (
-                  <li key={e.id} className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2"><span className="text-gray-400 w-6">#{i + 1}</span><span className="font-medium line-clamp-1">{e.title}</span></div>
-                    <span className="px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 text-xs">{e.attendee_count} attending</span>
+                  <li
+                    key={e.id}
+                    className="flex items-center justify-between text-sm"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-400 w-6">#{i + 1}</span>
+                      <span className="font-medium line-clamp-1">
+                        {e.title}
+                      </span>
+                    </div>
+                    <span className="px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 text-xs">
+                      {e.attendee_count} attending
+                    </span>
                   </li>
                 ))}
               </ol>
@@ -510,29 +726,49 @@ export default function AdminDashboardPage() {
           </CardHeader>
           <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {loading ? (
-              <div className="py-8 flex justify-center col-span-2"><LoadingSpinner /></div>
+              <div className="py-8 flex justify-center col-span-2">
+                <LoadingSpinner />
+              </div>
             ) : (
               <>
                 <div>
                   <h4 className="text-sm font-semibold mb-2">By Events</h4>
                   <ul className="space-y-2">
-                    {(data?.rankings.top_organizers_by_events ?? []).map((o) => (
-                      <li key={o.id} className="flex items-center justify-between text-sm">
-                        <span className="line-clamp-1">{o.first_name} {o.last_name}</span>
-                        <span className="text-gray-500 dark:text-gray-400">{o.events_count}</span>
-                      </li>
-                    ))}
+                    {(data?.rankings.top_organizers_by_events ?? []).map(
+                      (o) => (
+                        <li
+                          key={o.id}
+                          className="flex items-center justify-between text-sm"
+                        >
+                          <span className="line-clamp-1">
+                            {o.first_name} {o.last_name}
+                          </span>
+                          <span className="text-gray-500 dark:text-gray-400">
+                            {o.events_count}
+                          </span>
+                        </li>
+                      )
+                    )}
                   </ul>
                 </div>
                 <div>
                   <h4 className="text-sm font-semibold mb-2">By Attendees</h4>
                   <ul className="space-y-2">
-                    {(data?.rankings.top_organizers_by_attendees ?? []).map((o) => (
-                      <li key={o.id} className="flex items-center justify-between text-sm">
-                        <span className="line-clamp-1">{o.first_name} {o.last_name}</span>
-                        <span className="text-gray-500 dark:text-gray-400">{o.attendee_count}</span>
-                      </li>
-                    ))}
+                    {(data?.rankings.top_organizers_by_attendees ?? []).map(
+                      (o) => (
+                        <li
+                          key={o.id}
+                          className="flex items-center justify-between text-sm"
+                        >
+                          <span className="line-clamp-1">
+                            {o.first_name} {o.last_name}
+                          </span>
+                          <span className="text-gray-500 dark:text-gray-400">
+                            {o.attendee_count}
+                          </span>
+                        </li>
+                      )
+                    )}
                   </ul>
                 </div>
               </>
@@ -548,7 +784,9 @@ export default function AdminDashboardPage() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="py-8 flex justify-center"><LoadingSpinner /></div>
+            <div className="py-8 flex justify-center">
+              <LoadingSpinner />
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
@@ -561,14 +799,22 @@ export default function AdminDashboardPage() {
                 </thead>
                 <tbody>
                   {(data?.breakdowns.events_by_category ?? []).map((c) => (
-                    <tr key={c.name} className="border-t border-gray-100 dark:border-white/10">
+                    <tr
+                      key={c.name}
+                      className="border-t border-gray-100 dark:border-white/10"
+                    >
                       <td className="py-2 pr-4">{c.name}</td>
                       <td className="py-2 pr-4">{c.count}</td>
                       <td className="py-2">
                         <div className="h-2 bg-gray-200 dark:bg-white/10 rounded-full overflow-hidden">
                           <div
                             className="h-full bg-emerald-500"
-                            style={{ width: `${percentOf(c.count, data?.totals.events ?? 1)}%` }}
+                            style={{
+                              width: `${percentOf(
+                                c.count,
+                                data?.totals.events ?? 1
+                              )}%`,
+                            }}
                           />
                         </div>
                       </td>
@@ -589,14 +835,26 @@ function percentOf(value: number, total: number) {
   return Math.round((value / total) * 100);
 }
 
-function StatCard({ title, value, icon }: { title: string; value: number; icon: React.ReactNode }) {
+function StatCard({
+  title,
+  value,
+  icon,
+}: {
+  title: string;
+  value: number;
+  icon: React.ReactNode;
+}) {
   return (
     <Card className="overflow-hidden">
       <CardHeader className="pb-2">
-        <CardTitle className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">{title}</CardTitle>
+        <CardTitle className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+          {title}
+        </CardTitle>
       </CardHeader>
       <CardContent className="flex items-end justify-between">
-        <div className="text-3xl font-bold">{new Intl.NumberFormat().format(value)}</div>
+        <div className="text-3xl font-bold">
+          {new Intl.NumberFormat().format(value)}
+        </div>
         <div className="p-2 rounded-xl bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-200">
           {icon}
         </div>
@@ -607,7 +865,15 @@ function StatCard({ title, value, icon }: { title: string; value: number; icon: 
 
 function Donut({ data }: { data: { name: string; value: number }[] }) {
   const total = data.reduce((a, b) => a + b.value, 0) || 1;
-  const colors = ["#4F46E5", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#06B6D4", "#84CC16"]; // variety
+  const colors = [
+    "#4F46E5",
+    "#10B981",
+    "#F59E0B",
+    "#EF4444",
+    "#8B5CF6",
+    "#06B6D4",
+    "#84CC16",
+  ]; // variety
   const isDark = getIsDark();
   const labelColor = isDark ? AXIS_COLOR_DARK : AXIS_COLOR_LIGHT;
 
@@ -629,7 +895,14 @@ function Donut({ data }: { data: { name: string; value: number }[] }) {
           ))}
         </Pie>
         {/* center label */}
-        <text x="50%" y="50%" textAnchor="middle" dominantBaseline="middle" className="fill-current" style={{ fill: labelColor }}>
+        <text
+          x="50%"
+          y="50%"
+          textAnchor="middle"
+          dominantBaseline="middle"
+          className="fill-current"
+          style={{ fill: labelColor }}
+        >
           {total}
         </text>
       </PieChart>

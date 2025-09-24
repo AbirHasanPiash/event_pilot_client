@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
+import useSWR from "swr";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
@@ -54,25 +55,32 @@ export default function EventDetailsPage() {
   const router = useRouter();
   const safeApiFetch = useSafeApiFetch();
 
-  const [event, setEvent] = useState<EventDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-   
+  // Build SWR key
+  const swrKey = useMemo(() => {
+    if (!id) return null;
+    return `/api/events/${id}/`;
+  }, [id]);
 
+  // SWR fetcher
+  const fetcher = useCallback(
+    (url: string) => safeApiFetch<EventDetail>(url),
+    [safeApiFetch]
+  );
+
+  // SWR hook
+  const { data: event, error, isLoading, mutate } = useSWR<EventDetail | null>(
+    swrKey,
+    fetcher
+  );
+
+  // Error toast
   useEffect(() => {
-    if (!id) return;
+    if (error instanceof Error) {
+      toast.error(error.message);
+    }
+  }, [error]);
 
-    const fetchEvent = async () => {
-      try {
-        const data = await safeApiFetch<EventDetail>(`/api/events/${id}/`);
-        setEvent(data);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchEvent();
-  }, [id, safeApiFetch]);
-
+  // Handle reaction
   const handleReaction = async (
     status: "attending" | "interested" | "none"
   ) => {
@@ -89,7 +97,7 @@ export default function EventDetailsPage() {
       );
 
       if (updated && updated.id) {
-        setEvent(updated);
+        await mutate(updated, false); // update cache without revalidation
         toast.success("Reaction updated successfully");
       }
     } catch (err: unknown) {
@@ -103,7 +111,7 @@ export default function EventDetailsPage() {
     }
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center bg-white dark:bg-black justify-center min-h-screen">
         <LoadingSpinner />
@@ -206,6 +214,7 @@ export default function EventDetailsPage() {
               </a>
             </div>
           )}
+
           {/* Schedule Timeline */}
           <ScheduleTimeline />
         </div>
@@ -258,10 +267,8 @@ export default function EventDetailsPage() {
                     )
                   }
                   disabled={
-                    // Disable if archived or past end date
                     event.status === "archived" ||
                     dayjs().isAfter(dayjs(event.end_time)) ||
-                    // Or if full & no waitlist
                     (event.reaction_status !== "attending" &&
                       event.attending_count >= event.capacity &&
                       !event.allow_waitlist)
