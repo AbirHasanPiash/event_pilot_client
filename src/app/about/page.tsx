@@ -1,9 +1,10 @@
 "use client";
 
+import { useAuth } from "@/context/AuthContext";
 import { motion } from "framer-motion";
 import { Users, CalendarDays, Sparkles, ShieldCheck } from "lucide-react";
 import Image from "next/image";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 const values = [
   {
@@ -29,6 +30,17 @@ const values = [
 ];
 
 export default function AboutPage() {
+  const { user } = useAuth();
+  const router = useRouter();
+
+  const handleGetStarted = () => {
+    if (user) {
+      router.push("/events");
+    } else {
+      router.push("/auth/register");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-white dark:bg-black text-gray-900 dark:text-gray-100">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-30 space-y-24">
@@ -132,18 +144,14 @@ export default function AboutPage() {
               Join EventPilot today and take the first step toward smarter, more
               impactful event management.
             </p>
-            <motion.div
+            <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              className="inline-block"
+              onClick={handleGetStarted}
+              className="px-6 py-3 rounded-xl bg-white text-indigo-600 font-semibold shadow hover:bg-gray-100 transition inline-block"
             >
-              <Link
-                href="/auth/register"
-                className="px-6 py-3 rounded-xl bg-white text-indigo-600 font-semibold shadow hover:bg-gray-100 transition inline-block"
-              >
-                Get Started
-              </Link>
-            </motion.div>
+              Get Started
+            </motion.button>
           </motion.div>
         </section>
       </div>

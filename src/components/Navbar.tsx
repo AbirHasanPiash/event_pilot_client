@@ -313,40 +313,7 @@ export default function Navbar() {
                     Sign Up
                   </Link>
                 </>
-              ) : (
-                <>
-                  <Link
-                    href="/user/profile"
-                    className="text-gray-700 dark:text-gray-300 hover:text-indigo-600
-                               focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded-lg px-1 py-0.5"
-                    onClick={() => setIsOpen(false)}
-                  >
-                    Profile
-                  </Link>
-
-                  <button
-                    onClick={() => {
-                      handleDashboardRedirect();
-                      setIsOpen(false);
-                    }}
-                    className="text-left text-gray-700 dark:text-gray-300 hover:text-indigo-600
-                               focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded-lg px-1 py-0.5"
-                  >
-                    Dashboard
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      logout();
-                      setIsOpen(false);
-                    }}
-                    className="text-red-600 hover:text-red-700 text-left
-                               focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded-lg px-1 py-0.5"
-                  >
-                    Logout
-                  </button>
-                </>
-              )}
+              ) : null}
             </div>
           </motion.div>
         )}

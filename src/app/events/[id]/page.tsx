@@ -105,7 +105,7 @@ export default function EventDetailsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center bg-white dark:bg-black justify-center min-h-screen">
         <LoadingSpinner />
       </div>
     );
