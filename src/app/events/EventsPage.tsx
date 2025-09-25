@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import useSWR from "swr";
@@ -72,13 +72,13 @@ export default function EventsPage() {
     return () => clearTimeout(t);
   }, [searchTerm]);
 
-  // Build query string
+  // Build query string (always include page)
   const buildQuery = useCallback(
     (pageNum = page, filter = dateFilter, search = debouncedSearch) => {
       const params = new URLSearchParams();
+      params.set("page", String(pageNum));
       if (filter) params.set("date_filter", filter);
       if (search) params.set("search", search);
-      if (pageNum > 1) params.set("page", String(pageNum));
       return params.toString();
     },
     [dateFilter, debouncedSearch, page]
@@ -98,27 +98,63 @@ export default function EventsPage() {
 
   // SWR hook
   const { data, error, isLoading } = useSWR<PaginatedResponse<Event> | null>(
-  swrKey,
-  fetcher
-);
-
+    swrKey,
+    fetcher
+  );
 
   useEffect(() => {
-  if (error instanceof Error) {
-    toast.error(error.message);
-  }
-}, [error]);
+    if (error instanceof Error) {
+      toast.error(error.message);
+    }
+  }, [error]);
+
+  // keep previous values to decide whether to push or replace
+  const prevRef = useRef({
+    page: initialPage,
+    dateFilter: initialFilter,
+    debouncedSearch: initialSearch,
+  });
 
   // Sync URL when state changes
   useEffect(() => {
     const qs = buildQuery(page);
-    router.replace(`/events?${qs}`);
+    const url = `/events?${qs}`;
+
+    sessionStorage.setItem("events_last_list_url", url);
+
+    const prev = prevRef.current;
+    const onlyPageChanged =
+      prev.page !== page &&
+      prev.dateFilter === dateFilter &&
+      prev.debouncedSearch === debouncedSearch;
+
+    if (onlyPageChanged) {
+      router.push(url, { scroll: false });
+    } else {
+      router.replace(url, { scroll: false });
+    }
+
+    prevRef.current = { page, dateFilter, debouncedSearch };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, dateFilter, debouncedSearch, router, buildQuery]);
 
-  // Reset page when filter/search changes
+
+useEffect(() => {
+  setPage(1);
+}, [dateFilter, debouncedSearch]);
+
+
   useEffect(() => {
-    setPage(1);
-  }, [dateFilter, debouncedSearch]);
+  const urlPage = Number(searchParams.get("page") || 1);
+  const urlFilter = searchParams.get("date_filter") || "";
+  const urlSearch = searchParams.get("search") || "";
+
+  setPage(urlPage);
+  setDateFilter(urlFilter);
+  setSearchTerm(urlSearch);
+  setDebouncedSearch(urlSearch);
+}, [searchParams]);
+
 
   // Events (filter out drafts)
   const events = useMemo(
@@ -237,7 +273,12 @@ export default function EventsPage() {
                 {events.map((event) => (
                   <article
                     key={event.id}
-                    onClick={() => router.push(`/events/${event.id}`)}
+                    onClick={() => {
+                      const qs = buildQuery();
+                      router.push(
+                        `/events/${event.id}?from=${encodeURIComponent(qs)}`
+                      );
+                    }}
                     className="group cursor-pointer rounded-2xl overflow-hidden shadow-[0_6px_18px_rgba(15,23,42,0.06)] dark:shadow-none border border-gray-100 dark:border-gray-800 bg-gradient-to-b from-white to-white/90 dark:from-gray-900 dark:to-gray-900/95 hover:scale-[1.01] transition-transform duration-200"
                   >
                     <div className="relative h-44 w-full">

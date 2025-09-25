@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import useSWR from "swr";
 import dayjs from "dayjs";
@@ -54,6 +54,9 @@ export default function EventDetailsPage() {
   const { id } = useParams();
   const router = useRouter();
   const safeApiFetch = useSafeApiFetch();
+  const searchParams = useSearchParams();
+
+  const [isReacting, setIsReacting] = useState<"attending" | "interested" | null>(null);
 
   // Build SWR key
   const swrKey = useMemo(() => {
@@ -68,10 +71,12 @@ export default function EventDetailsPage() {
   );
 
   // SWR hook
-  const { data: event, error, isLoading, mutate } = useSWR<EventDetail | null>(
-    swrKey,
-    fetcher
-  );
+  const {
+    data: event,
+    error,
+    isLoading,
+    mutate,
+  } = useSWR<EventDetail | null>(swrKey, fetcher);
 
   // Error toast
   useEffect(() => {
@@ -85,6 +90,11 @@ export default function EventDetailsPage() {
     status: "attending" | "interested" | "none"
   ) => {
     if (!event) return;
+    if (status === "none") {
+      setIsReacting(event.reaction_status || null);
+    } else {
+      setIsReacting(status);
+    }
 
     try {
       const updated = await safeApiFetch<EventDetail>(
@@ -108,6 +118,20 @@ export default function EventDetailsPage() {
       } else {
         toast.error("Failed to update reaction");
       }
+    } finally {
+      setIsReacting(null);
+    }
+  };
+
+  const handleBack = () => {
+    if (document.referrer.includes("/events")) {
+      router.back();
+    } else {
+      const fromQs = searchParams.get("from");
+      const lastListUrl = fromQs
+        ? `/events?${decodeURIComponent(fromQs)}`
+        : sessionStorage.getItem("events_last_list_url") || "/events";
+      router.push(lastListUrl);
     }
   };
 
@@ -124,8 +148,8 @@ export default function EventDetailsPage() {
       <div className="text-center py-20">
         <p className="text-gray-500 dark:text-gray-400">Event not found.</p>
         <button
-          onClick={() => router.push("/events")}
-          className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+          onClick={handleBack}
+          className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg"
         >
           Back to Events
         </button>
@@ -217,6 +241,14 @@ export default function EventDetailsPage() {
 
           {/* Schedule Timeline */}
           <ScheduleTimeline />
+          <div className="mt-8">
+            <button
+              onClick={handleBack}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+            >
+              ← Back to Events
+            </button>
+          </div>
         </div>
 
         {/* Sidebar */}
@@ -267,6 +299,7 @@ export default function EventDetailsPage() {
                     )
                   }
                   disabled={
+                    isReacting !== null ||
                     event.status === "archived" ||
                     dayjs().isAfter(dayjs(event.end_time)) ||
                     (event.reaction_status !== "attending" &&
@@ -286,7 +319,9 @@ export default function EventDetailsPage() {
                       : ""
                   }`}
                 >
-                  {event.reaction_status === "attending"
+                  {isReacting === "attending"
+                    ? "Updating..."
+                    : event.reaction_status === "attending"
                     ? "Attending ✓"
                     : event.attending_count >= event.capacity &&
                       !event.allow_waitlist
@@ -302,6 +337,7 @@ export default function EventDetailsPage() {
                     )
                   }
                   disabled={
+                    isReacting !== null ||
                     event.status === "archived" ||
                     dayjs().isAfter(dayjs(event.end_time))
                   }
@@ -316,7 +352,9 @@ export default function EventDetailsPage() {
                       : ""
                   }`}
                 >
-                  {event.reaction_status === "interested"
+                  {isReacting === "interested"
+                    ? "Updating..."
+                    : event.reaction_status === "interested"
                     ? "Interested ★"
                     : "Mark as Interested"}
                 </button>
