@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import useSWR from "swr";
 import { useSafeApiFetch } from "@/lib/apiWrapper";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import LoadingSpinner from "@/components/LoadingSpinner";
@@ -31,89 +32,19 @@ export default function OrganizerRequestsPage() {
   const initialFilter = searchParams.get("status") || "pending";
   const initialPage = parseInt(searchParams.get("page") || "1", 10);
 
-  const [requests, setRequests] = useState<OrganizerRequest[]>([]);
-  const [, setCount] = useState(0);
-  const [next, setNext] = useState<string | null>(null);
-  const [previous, setPrevious] = useState<string | null>(null);
   const [filter, setFilter] = useState(initialFilter);
   const [currentPage, setCurrentPage] = useState(initialPage);
-  const [loading, setLoading] = useState(true);
 
-  // Cache for (status + page)
-  const [cache, setCache] = useState<
-    Record<string, PaginatedResponse<OrganizerRequest>>
-  >({});
+  // Fetcher
+  const fetcher = useCallback(
+    (url: string) => safeApiFetch<PaginatedResponse<OrganizerRequest>>(url),
+    [safeApiFetch]
+  );
 
-  const makeKey = (status: string, page: number) => `${status}-${page}`;
-
-  // Load requests with cache + background refresh
-  const loadRequests = useCallback(
-    async (status: string, page = 1, pageUrl?: string) => {
-      const key = makeKey(status, page);
-
-      // Serve cached data instantly if available
-      if (cache[key]) {
-        const cached = cache[key];
-        setRequests(cached.results);
-        setCount(cached.count);
-        setNext(cached.next);
-        setPrevious(cached.previous);
-        setLoading(false);
-
-        // background refresh
-        safeApiFetch<PaginatedResponse<OrganizerRequest>>(
-          pageUrl ||
-            `/api/dashboard/request-organizer/list/?status=${status}&page=${page}`
-        ).then((fresh) => {
-          if (fresh) {
-            setCache((prev) => ({ ...prev, [key]: fresh }));
-            if (makeKey(filter, currentPage) === key) {
-              setRequests(fresh.results);
-              setCount(fresh.count);
-              setNext(fresh.next);
-              setPrevious(fresh.previous);
-            }
-          }
-        });
-        return;
-      }
-
-      // Otherwise fetch fresh
-      setLoading(true);
-      const data = await safeApiFetch<PaginatedResponse<OrganizerRequest>>(
-        pageUrl ||
-          `/api/dashboard/request-organizer/list/?status=${status}&page=${page}`
-      );
-
-      if (data) {
-        setRequests(data.results);
-        setCount(data.count);
-        setNext(data.next);
-        setPrevious(data.previous);
-        setCache((prev) => ({ ...prev, [key]: data }));
-
-        // Prefetch next page
-        if (data.next) {
-          safeApiFetch<PaginatedResponse<OrganizerRequest>>(data.next).then(
-            (nextData) => {
-              if (nextData) {
-                setCache((prev) => ({
-                  ...prev,
-                  [makeKey(status, page + 1)]: nextData,
-                }));
-              }
-            }
-          );
-        }
-      } else {
-        setRequests([]);
-        setCount(0);
-        setNext(null);
-        setPrevious(null);
-      }
-      setLoading(false);
-    },
-    [safeApiFetch, cache, filter, currentPage]
+  const { data, error, isLoading, mutate } = useSWR(
+    `/api/dashboard/request-organizer/list/?status=${filter}&page=${currentPage}`,
+    fetcher,
+    { revalidateOnFocus: false }
   );
 
   // Handle filter change
@@ -125,23 +56,18 @@ export default function OrganizerRequestsPage() {
     else params.delete("status");
     params.set("page", "1");
     router.replace(`/user/dashboard/admin/organizer-requests?${params}`);
-    loadRequests(value, 1);
+    mutate(); // refetch with new filter
   };
 
   // Page navigation
-  const goToPage = (newPage: number, url?: string) => {
+  const goToPage = (newPage: number) => {
     setCurrentPage(newPage);
     const params = new URLSearchParams(Array.from(searchParams.entries()));
     if (filter) params.set("status", filter);
     params.set("page", String(newPage));
     router.replace(`/user/dashboard/admin/organizer-requests?${params}`);
-    loadRequests(filter, newPage, url);
+    mutate(); // refetch with new page
   };
-
-  useEffect(() => {
-    loadRequests(initialFilter, initialPage);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-8">
@@ -159,15 +85,17 @@ export default function OrganizerRequestsPage() {
         </select>
       </div>
 
-      {loading && requests.length === 0 ? (
+      {isLoading ? (
         <LoadingSpinner />
-      ) : requests.length === 0 ? (
+      ) : error || !data ? (
+        <p className="text-gray-500">Failed to load requests.</p>
+      ) : data.results.length === 0 ? (
         <p className="text-gray-500">No {filter} requests found.</p>
       ) : (
         <>
           {/* Requests List */}
           <div className="space-y-4">
-            {requests.map((req) => (
+            {data.results.map((req) => (
               <div
                 key={req.id}
                 className="flex items-center justify-between p-4 border rounded-lg bg-white dark:bg-gray-900 shadow-sm"
@@ -214,9 +142,9 @@ export default function OrganizerRequestsPage() {
             <div className="flex gap-2 w-full sm:w-auto justify-center">
               <button
                 onClick={() => goToPage(Math.max(1, currentPage - 1))}
-                disabled={!previous}
+                disabled={!data.previous}
                 className={`inline-flex items-center gap-2 px-4 py-2 rounded-md ${
-                  previous
+                  data.previous
                     ? "bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-white"
                     : "opacity-50 cursor-not-allowed"
                 }`}
@@ -225,9 +153,9 @@ export default function OrganizerRequestsPage() {
               </button>
               <button
                 onClick={() => goToPage(currentPage + 1)}
-                disabled={!next}
+                disabled={!data.next}
                 className={`inline-flex items-center gap-2 px-4 py-2 rounded-md ${
-                  next
+                  data.next
                     ? "bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-white"
                     : "opacity-50 cursor-not-allowed"
                 }`}

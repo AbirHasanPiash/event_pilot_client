@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "react-hot-toast";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
 import relativeTime from "dayjs/plugin/relativeTime";
 import { useSafeApiFetch } from "@/lib/apiWrapper";
+import useSWR from "swr";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import {
   BarChart as BarChartIcon,
@@ -16,12 +17,7 @@ import {
   UserCheck,
   ListOrdered,
 } from "lucide-react";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   ResponsiveContainer,
@@ -61,8 +57,6 @@ interface OrganizerDashboardData {
 }
 
 // --- Config ---
-const LS_KEY = "eventpilot_organizer_dashboard_v1";
-const REVALIDATE_MS = 5 * 60 * 1000; // treat cache fresh for 5 minutes
 const POLL_MS = 2 * 60 * 1000; // background refresh every 2 minutes
 
 // color palette (works in light & dark, matching AdminDashboard)
@@ -97,29 +91,18 @@ function getIsDark() {
   return document.documentElement.classList.contains("dark");
 }
 
-function safeLocalStorageGet<T>(key: string): { data: T; timestamp: number } | null {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
-
-function safeLocalStorageSet<T>(key: string, value: { data: T; timestamp: number }) {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // ignore quota errors
-  }
-}
-
 // Build last 12 months time-series for events and attendees
-function buildLast12MonthsSeries(stats: OrganizerDashboardData["monthly_stats"]) {
+function buildLast12MonthsSeries(
+  stats: OrganizerDashboardData["monthly_stats"]
+) {
   const now = dayjs();
   const labels: string[] = [];
-  const points: Array<{ label: string; key: string; events: number; attendees: number }> = [];
+  const points: Array<{
+    label: string;
+    key: string;
+    events: number;
+    attendees: number;
+  }> = [];
 
   for (let i = 11; i >= 0; i--) {
     const d = now.subtract(i, "month");
@@ -148,7 +131,12 @@ function buildLast12MonthsSeries(stats: OrganizerDashboardData["monthly_stats"])
 function buildLast5YearsSeries(stats: OrganizerDashboardData["yearly_stats"]) {
   const thisYear = dayjs().year();
   const years = Array.from({ length: 5 }, (_, i) => thisYear - 4 + i);
-  const base = years.map((y) => ({ label: String(y), year: y, events: 0, attendees: 0 }));
+  const base = years.map((y) => ({
+    label: String(y),
+    year: y,
+    events: 0,
+    attendees: 0,
+  }));
   const byYear = Object.fromEntries(base.map((b) => [b.year, b]));
 
   (stats || []).forEach((y) => {
@@ -174,20 +162,22 @@ function tooltipFormatter(value: string | number) {
 export default function OrganizerDashboardPage() {
   const safeApiFetch = useSafeApiFetch();
 
-  const [data, setData] = useState<OrganizerDashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [chartMode, setChartMode] = useState<"bar" | "line">("bar");
   const [metric, setMetric] = useState<"events" | "attendees">("events");
   const [timeframe, setTimeframe] = useState<"12m" | "5y">("12m");
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [isDark, setIsDark] = useState(getIsDark());
-  const [windowWidth, setWindowWidth] = useState(typeof window !== "undefined" ? window.innerWidth : 1024);
+  const [windowWidth, setWindowWidth] = useState(
+    typeof window !== "undefined" ? window.innerWidth : 1024
+  );
 
   // observe theme changes
   useEffect(() => {
     const observer = new MutationObserver(() => setIsDark(getIsDark()));
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
     return () => observer.disconnect();
   }, []);
 
@@ -198,63 +188,40 @@ export default function OrganizerDashboardPage() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  const readFromCache = useCallback(() => {
-    const cached = safeLocalStorageGet<OrganizerDashboardData>(LS_KEY);
-    if (cached) {
-      setData(cached.data);
-      setLastUpdated(cached.timestamp);
-      setLoading(false);
-      return cached;
-    }
-    return null;
-  }, []);
+  const fetcher = useCallback(
+    async (url: string): Promise<OrganizerDashboardData> => {
+      const res = await safeApiFetch<OrganizerDashboardData | null>(url);
+      if (!res) throw new Error("Failed to load organizer dashboard");
+      return res;
+    },
+    [safeApiFetch]
+  );
 
-  const writeToCache = useCallback((next: OrganizerDashboardData) => {
-    const payload = { data: next, timestamp: Date.now() };
-    safeLocalStorageSet(LS_KEY, payload);
-    setData(next);
-    setLastUpdated(payload.timestamp);
-  }, []);
+  const {
+    data,
+    error,
+    isLoading: loading,
+    mutate,
+  } = useSWR<OrganizerDashboardData>("/api/dashboard/organizer", fetcher, {
+    refreshInterval: POLL_MS,
+    onSuccess: () => setLastUpdated(Date.now()),
+  });
 
-  const fetchFresh = useCallback(async (showToast = false) => {
-    try {
-      const res = await safeApiFetch<OrganizerDashboardData>("/api/dashboard/organizer");
-      if (res) {
-        writeToCache(res);
-        if (showToast) toast.success("Dashboard refreshed");
-      }
-    } catch {
-      toast.error("Failed to load dashboard data");
-    } finally {
-      setLoading(false);
-    }
-  }, [safeApiFetch, writeToCache]);
-
-  // initial load: show cache immediately, then revalidate if stale
   useEffect(() => {
-    const cached = readFromCache();
-    const isStale = !cached || (Date.now() - cached.timestamp > REVALIDATE_MS);
-    if (isStale) {
-      fetchFresh(false);
-    } else {
-      setLoading(false);
+    if (error) {
+      toast.error(error.message || "Failed to load dashboard");
     }
-  }, [fetchFresh, readFromCache]);
-
-  // background polling
-  useEffect(() => {
-    if (pollRef.current) clearInterval(pollRef.current);
-    pollRef.current = setInterval(() => {
-      fetchFresh(false);
-    }, POLL_MS);
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-  }, [fetchFresh]);
+  }, [error]);
 
   // derived chart data with responsive data limiting
-  const last12m = useMemo(() => (data ? buildLast12MonthsSeries(data.monthly_stats) : []), [data]);
-  const last5y = useMemo(() => (data ? buildLast5YearsSeries(data.yearly_stats) : []), [data]);
+  const last12m = useMemo(
+    () => (data ? buildLast12MonthsSeries(data.monthly_stats) : []),
+    [data]
+  );
+  const last5y = useMemo(
+    () => (data ? buildLast5YearsSeries(data.yearly_stats) : []),
+    [data]
+  );
   const chartData = useMemo(() => {
     if (timeframe === "12m") {
       if (windowWidth < 640) {
@@ -278,16 +245,31 @@ export default function OrganizerDashboardPage() {
 
   const metricLabel = metric[0].toUpperCase() + metric.slice(1);
 
+  const handleRefresh = async () => {
+    try {
+      await mutate();
+      toast.success("Dashboard refreshed");
+    } catch {}
+  };
+
   return (
     <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight">Organizer Dashboard</h1>
-          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 break-words">Overview of your events and attendees.</p>
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight">
+            Organizer Dashboard
+          </h1>
+          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 break-words">
+            Overview of your events and attendees.
+          </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => fetchFresh(true)} className="gap-2 text-xs sm:text-sm">
+          <Button
+            variant="outline"
+            onClick={handleRefresh}
+            className="gap-2 text-xs sm:text-sm"
+          >
             <RefreshCw className="h-4 w-4" /> Refresh
           </Button>
           {lastUpdated && (
@@ -322,13 +304,25 @@ export default function OrganizerDashboardPage() {
             <div className="isolate inline-flex rounded-lg shadow-sm border border-gray-200 dark:border-white/10">
               <button
                 onClick={() => setTimeframe("12m")}
-                className={`px-2 sm:px-3 py-1 text-xs sm:text-sm rounded-l-lg ${timeframe === "12m" ? "bg-indigo-600 text-white" : "hover:bg-gray-100 dark:hover:bg-white/10"}`}
+                className={`px-2 sm:px-3 py-1 text-xs sm:text-sm rounded-l-lg ${
+                  timeframe === "12m"
+                    ? "bg-indigo-600 text-white"
+                    : "hover:bg-gray-100 dark:hover:bg-white/10"
+                }`}
               >
-                {windowWidth < 640 ? "Last 3 months" : windowWidth < 1024 ? "Last 6 months" : "Last 12 months"}
+                {windowWidth < 640
+                  ? "Last 3 months"
+                  : windowWidth < 1024
+                  ? "Last 6 months"
+                  : "Last 12 months"}
               </button>
               <button
                 onClick={() => setTimeframe("5y")}
-                className={`px-2 sm:px-3 py-1 text-xs sm:text-sm rounded-r-lg hidden sm:block ${timeframe === "5y" ? "bg-indigo-600 text-white" : "hover:bg-gray-100 dark:hover:bg-white/10"}`}
+                className={`px-2 sm:px-3 py-1 text-xs sm:text-sm rounded-r-lg hidden sm:block ${
+                  timeframe === "5y"
+                    ? "bg-indigo-600 text-white"
+                    : "hover:bg-gray-100 dark:hover:bg-white/10"
+                }`}
               >
                 {windowWidth < 640 ? "Last 3 years" : "Last 5 years"}
               </button>
@@ -337,13 +331,21 @@ export default function OrganizerDashboardPage() {
             <div className="isolate inline-flex rounded-lg shadow-sm border border-gray-200 dark:border-white/10">
               <button
                 onClick={() => setMetric("events")}
-                className={`px-2 sm:px-3 py-1 text-xs sm:text-sm ${metric === "events" ? "bg-emerald-600 text-white" : "hover:bg-gray-100 dark:hover:bg-white/10"}`}
+                className={`px-2 sm:px-3 py-1 text-xs sm:text-sm ${
+                  metric === "events"
+                    ? "bg-emerald-600 text-white"
+                    : "hover:bg-gray-100 dark:hover:bg-white/10"
+                }`}
               >
                 Events
               </button>
               <button
                 onClick={() => setMetric("attendees")}
-                className={`px-2 sm:px-3 py-1 text-xs sm:text-sm rounded-r-lg ${metric === "attendees" ? "bg-amber-600 text-white" : "hover:bg-gray-100 dark:hover:bg-white/10"}`}
+                className={`px-2 sm:px-3 py-1 text-xs sm:text-sm rounded-r-lg ${
+                  metric === "attendees"
+                    ? "bg-amber-600 text-white"
+                    : "hover:bg-gray-100 dark:hover:bg-white/10"
+                }`}
               >
                 Attendees
               </button>
@@ -352,13 +354,21 @@ export default function OrganizerDashboardPage() {
             <div className="isolate inline-flex rounded-lg shadow-sm border border-gray-200 dark:border-white/10">
               <button
                 onClick={() => setChartMode("bar")}
-                className={`px-2 sm:px-3 py-1 text-xs sm:text-sm flex items-center gap-1 rounded-l-lg ${chartMode === "bar" ? "bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900" : "hover:bg-gray-100 dark:hover:bg-white/10"}`}
+                className={`px-2 sm:px-3 py-1 text-xs sm:text-sm flex items-center gap-1 rounded-l-lg ${
+                  chartMode === "bar"
+                    ? "bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900"
+                    : "hover:bg-gray-100 dark:hover:bg-white/10"
+                }`}
               >
                 <BarChartIcon className="h-4 w-4" /> Bar
               </button>
               <button
                 onClick={() => setChartMode("line")}
-                className={`px-2 sm:px-3 py-1 text-xs sm:text-sm flex items-center gap-1 rounded-r-lg ${chartMode === "line" ? "bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900" : "hover:bg-gray-100 dark:hover:bg-white/10"}`}
+                className={`px-2 sm:px-3 py-1 text-xs sm:text-sm flex items-center gap-1 rounded-r-lg ${
+                  chartMode === "line"
+                    ? "bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900"
+                    : "hover:bg-gray-100 dark:hover:bg-white/10"
+                }`}
               >
                 <LineChartIcon className="h-4 w-4" /> Line
               </button>
@@ -367,11 +377,16 @@ export default function OrganizerDashboardPage() {
         </CardHeader>
         <CardContent className="h-[300px] sm:h-[340px]">
           {loading ? (
-            <div className="h-full flex items-center justify-center"><LoadingSpinner /></div>
+            <div className="h-full flex items-center justify-center">
+              <LoadingSpinner />
+            </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               {chartMode === "bar" ? (
-                <BarChart data={chartData} margin={{ left: 12, right: 12, top: 8 }}>
+                <BarChart
+                  data={chartData}
+                  margin={{ left: 12, right: 12, top: 8 }}
+                >
                   <CartesianGrid stroke={gridColor} strokeDasharray="3 3" />
                   <XAxis
                     dataKey="label"
@@ -392,7 +407,10 @@ export default function OrganizerDashboardPage() {
                   />
                 </BarChart>
               ) : (
-                <LineChart data={chartData} margin={{ left: 12, right: 12, top: 8 }}>
+                <LineChart
+                  data={chartData}
+                  margin={{ left: 12, right: 12, top: 8 }}
+                >
                   <CartesianGrid stroke={gridColor} strokeDasharray="3 3" />
                   <XAxis
                     dataKey="label"
@@ -421,14 +439,26 @@ export default function OrganizerDashboardPage() {
   );
 }
 
-function StatCard({ title, value, icon }: { title: string; value: number; icon: React.ReactNode }) {
+function StatCard({
+  title,
+  value,
+  icon,
+}: {
+  title: string;
+  value: number;
+  icon: React.ReactNode;
+}) {
   return (
     <Card className="overflow-hidden flex-1 min-w-[150px]">
       <CardHeader className="pb-2">
-        <CardTitle className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">{title}</CardTitle>
+        <CardTitle className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+          {title}
+        </CardTitle>
       </CardHeader>
       <CardContent className="flex items-end justify-between">
-        <div className="text-xl sm:text-2xl md:text-3xl font-bold">{new Intl.NumberFormat().format(value)}</div>
+        <div className="text-xl sm:text-2xl md:text-3xl font-bold">
+          {new Intl.NumberFormat().format(value)}
+        </div>
         <div className="p-2 rounded-xl bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-200">
           {icon}
         </div>

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import useSWR, { mutate } from "swr";
 import { toast } from "react-hot-toast";
 import { useSafeApiFetch } from "@/lib/apiWrapper";
 import { CheckCircle2, XCircle, ArrowLeft } from "lucide-react";
@@ -23,58 +23,72 @@ interface OrganizerRequest {
 }
 
 export default function OrganizerRequestDetailPage() {
-  const params = useParams();
+  const { id } = useParams();
   const router = useRouter();
   const safeApiFetch = useSafeApiFetch();
-  const [request, setRequest] = useState<OrganizerRequest | null>(null);
-  const [loading, setLoading] = useState(true);
 
-  const requestId = params?.id;
+  const requestId = id;
 
-  // Fetch request details
-  const fetchRequest = async () => {
-    setLoading(true);
-    const data = await safeApiFetch<OrganizerRequest>(
-      `/api/dashboard/request-organizer/${requestId}/`
-    );
-    if (data) setRequest(data);
-    else toast.error("Failed to load request.");
-    setLoading(false);
-  };
+  // SWR fetcher
+  const fetcher = (url: string) => safeApiFetch<OrganizerRequest>(url);
 
-  // Update request status
+  // SWR hook for request details
+  const { data: request, error, isLoading } = useSWR(
+    requestId ? `/api/dashboard/request-organizer/${requestId}/` : null,
+    fetcher
+  );
+
+  // Update request status (with optimistic UI)
   const updateRequest = async (newStatus: "approved" | "rejected") => {
-    const result = await safeApiFetch(
-      `/api/dashboard/request-organizer/${requestId}/update/`,
-      {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
-      }
+    if (!request) return;
+
+    // Optimistically update local cache
+    const key = `/api/dashboard/request-organizer/${requestId}/`;
+    const previousData = request;
+
+    mutate(
+      key,
+      { ...request, status: newStatus, reviewed_at: new Date().toISOString() },
+      false // skip revalidation for now
     );
 
-    if (result) {
-      toast.success(`Request ${newStatus}!`);
-      fetchRequest();
-    } else {
+    try {
+      const result = await safeApiFetch(
+        `/api/dashboard/request-organizer/${requestId}/update/`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: newStatus }),
+        }
+      );
+
+      if (result) {
+        toast.success(`Request ${newStatus}!`);
+        // revalidate details + related lists
+        mutate(key);
+        mutate(
+          (k: string) =>
+            typeof k === "string" &&
+            k.startsWith("/api/dashboard/request-organizer/list/"),
+          undefined,
+          { revalidate: true }
+        );
+      } else {
+        // rollback on error
+        mutate(key, previousData, false);
+        toast.error("Failed to update request.");
+      }
+    } catch {
+      mutate(key, previousData, false);
       toast.error("Failed to update request.");
     }
   };
 
-  useEffect(() => {
-    if (requestId) fetchRequest();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requestId]);
-
-  if (loading) return <LoadingSpinner />;
-
-  if (!request) {
+  if (isLoading) return <LoadingSpinner />;
+  if (error || !request)
     return (
-      <div className="p-6 text-center text-gray-500">
-        Request not found.
-      </div>
+      <div className="p-6 text-center text-gray-500">Request not found.</div>
     );
-  }
 
   return (
     <div className="max-w-3xl mx-auto p-6 space-y-6">
@@ -113,7 +127,7 @@ export default function OrganizerRequestDetailPage() {
 
         {/* Details */}
         <div className="space-y-2 text-sm">
-            <p className="text-gray-500">{request.user_email}</p>
+          <p className="text-gray-500">{request.user_email}</p>
           <p>
             <span className="font-medium">Status:</span>{" "}
             <span

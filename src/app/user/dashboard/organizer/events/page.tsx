@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import useSWR, { mutate } from "swr";
 import { ArrowLeft, ArrowRight, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { useSafeApiFetch } from "@/lib/apiWrapper";
@@ -25,14 +26,29 @@ interface PaginatedResponse<T> {
   results: T[];
 }
 
+const EMPTY_EVENT_DATA: EventFormData = {
+  title: "",
+  description: "",
+  category: null,
+  tags: [],
+  image: null,
+  start_time: null,
+  end_time: null,
+  venue: "",
+  location_map_url: "",
+  visibility: "public",
+  status: "draft",
+  capacity: 0,
+  allow_waitlist: false,
+};
+
 export default function OrganizerEventsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const safeApiFetch = useSafeApiFetch();
   const { user } = useAuth();
 
-  const [events, setEvents] = useState<Event[]>([]);
-  const [loading, setLoading] = useState(true);
-
+  // Modal / form state
   const [showFormModal, setShowFormModal] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -40,154 +56,176 @@ export default function OrganizerEventsPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [eventToDelete, setEventToDelete] = useState<number | null>(null);
 
-  const searchParams = useSearchParams();
+  // URL-driven state
   const initialSearch = searchParams.get("search") || "";
-  const [searchTerm, setSearchTerm] = useState(initialSearch);
-
   const initialDateFilter = searchParams.get("date_filter") || "";
+  const initialPage = Number(searchParams.get("page") || 1);
+
+  const [searchTerm, setSearchTerm] = useState(initialSearch);
   const [dateFilter, setDateFilter] = useState(initialDateFilter);
+  const [page, setPage] = useState<number>(initialPage);
 
-  const [count, setCount] = useState<number>(0);
-  const [nextUrl, setNextUrl] = useState<string | null>(null);
-  const [prevUrl, setPrevUrl] = useState<string | null>(null);
-
-  const initialPage = parseInt(searchParams.get("page") || "1", 10);
-  const [currentPage, setCurrentPage] = useState<number>(initialPage);
-
-  const emptyEventData: EventFormData = useMemo(
-    () => ({
-      title: "",
-      description: "",
-      category: null,
-      tags: [],
-      image: null,
-      start_time: "",
-      end_time: "",
-      venue: "",
-      location_map_url: "",
-      visibility: "public",
-      status: "draft",
-      capacity: 0,
-      allow_waitlist: false,
-    }),
-    []
-  );
-
-  const memoizedInitialData = useMemo(() => {
-    return editingEvent
-      ? {
-          ...editingEvent,
-          image: null,
-          existingImage: editingEvent?.image || undefined,
-        }
-      : emptyEventData;
-  }, [editingEvent, emptyEventData]);
-
-  // Load events scoped to this organizer
-  const loadEvents = useCallback(
-    async (query = "", dateFilter = "", page = 1) => {
-      if (!user) return;
-      setLoading(true);
-
-      const params = new URLSearchParams();
-      params.set("organizer", String(user.id));
-      if (query) params.set("search", query);
-      if (dateFilter) params.set("date_filter", dateFilter);
-      params.set("page", String(page));
-
-      const data = await safeApiFetch<PaginatedResponse<Event>>(
-        `/api/events/?${params.toString()}`
-      );
-
-      if (data) {
-        setEvents(data.results);
-        setCount(data.count);
-        setNextUrl(data.next);
-        setPrevUrl(data.previous);
-      } else {
-        setEvents([]);
-      }
-
-      setLoading(false);
-    },
-    [safeApiFetch, user]
-  );
-
-  // Initial load
+  // Debounce search
+  const [debouncedSearch, setDebouncedSearch] = useState(searchTerm);
   useEffect(() => {
-    if (user) {
-      loadEvents(initialSearch, initialDateFilter, initialPage);
-    }
-  }, [user, loadEvents, initialSearch, initialDateFilter, initialPage]);
+    const t = setTimeout(() => setDebouncedSearch(searchTerm), 450);
+    return () => clearTimeout(t);
+  }, [searchTerm]);
 
-  // Debounced load on filter/page change
+  // Build query string
+  const buildQuery = useCallback(
+    (pageNum = page, filter = dateFilter, search = debouncedSearch) => {
+      const params = new URLSearchParams();
+      params.set("page", String(pageNum));
+      if (filter) params.set("date_filter", filter);
+      if (search) params.set("search", search);
+      if (user?.id) params.set("organizer", String(user.id));
+      return params.toString();
+    },
+    [dateFilter, debouncedSearch, page, user]
+  );
+
+  // SWR key
+  const swrKey = useMemo(() => {
+    if (!user) return null;
+    return `/api/events/?${buildQuery(page)}`;
+  }, [buildQuery, page, user]);
+
+  // SWR fetcher
+  const fetcher = useCallback(
+    (url: string) => safeApiFetch<PaginatedResponse<Event>>(url),
+    [safeApiFetch]
+  );
+
+  const { data, error, isLoading } = useSWR<PaginatedResponse<Event> | null>(
+    swrKey,
+    fetcher,
+    { keepPreviousData: true }
+  );
+
+  useEffect(() => {
+    if (error instanceof Error) {
+      toast.error(error.message);
+    }
+  }, [error]);
+
+  // Keep prev values for router behavior
+  const prevRef = useRef({
+    page: initialPage,
+    dateFilter: initialDateFilter,
+    debouncedSearch: initialSearch,
+  });
+
+  // Sync URL
   useEffect(() => {
     if (!user) return;
+    const qs = buildQuery(page);
+    const url = `/user/dashboard/organizer/events?${qs}`;
 
-    const delay = setTimeout(() => {
-      const params = new URLSearchParams(Array.from(searchParams.entries()));
-
-      if (searchTerm) params.set("search", searchTerm);
-      else params.delete("search");
-
-      if (dateFilter) params.set("date_filter", dateFilter);
-      else params.delete("date_filter");
-
-      if (currentPage !== 1) {
-        params.set("page", String(currentPage));
-      } else {
-        params.delete("page");
+    try {
+      if (typeof sessionStorage !== "undefined") {
+        sessionStorage.setItem("organizer_events_last_list_url", url);
       }
+    } catch {
+      // ignore storage errors
+    }
 
-      router.replace(`/user/dashboard/organizer/events?${params.toString()}`);
-      loadEvents(searchTerm, dateFilter, currentPage);
-    }, 500);
+    const prev = prevRef.current;
+    const onlyPageChanged =
+      prev.page !== page &&
+      prev.dateFilter === dateFilter &&
+      prev.debouncedSearch === debouncedSearch;
 
-    return () => clearTimeout(delay);
-  }, [searchTerm, dateFilter, currentPage, loadEvents, router, user, searchParams]);
-
-  const goToPage = (newPage: number) => {
-    const params = new URLSearchParams(Array.from(searchParams.entries()));
-    if (searchTerm) params.set("search", searchTerm);
-    else params.delete("search");
-    if (dateFilter) params.set("date_filter", dateFilter);
-    else params.delete("date_filter");
-    params.set("page", String(newPage));
-    router.replace(`/user/dashboard/organizer/events?${params.toString()}`);
-    setCurrentPage(newPage);
-  };
-
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setSearchTerm(value);
-
-    const params = new URLSearchParams(Array.from(searchParams.entries()));
-    if (value) {
-      params.set("search", value);
+    if (onlyPageChanged) {
+      router.push(url, { scroll: false });
     } else {
-      params.delete("search");
+      router.replace(url, { scroll: false });
     }
-    router.replace(`/user/dashboard/organizer/events?${params.toString()}`);
+
+    prevRef.current = { page, dateFilter, debouncedSearch };
+  }, [page, dateFilter, debouncedSearch, router, buildQuery, user]);
+
+  // Reset page when filters/search change
+  useEffect(() => {
+    setPage(1);
+  }, [dateFilter, debouncedSearch]);
+
+  // Sync state with URL
+  useEffect(() => {
+    const urlPage = Number(searchParams.get("page") || 1);
+    const urlFilter = searchParams.get("date_filter") || "";
+    const urlSearch = searchParams.get("search") || "";
+
+    setPage(urlPage);
+    setDateFilter(urlFilter);
+    setSearchTerm(urlSearch);
+    setDebouncedSearch(urlSearch);
+  }, [searchParams]);
+
+  // Data
+  const events = data?.results || [];
+  const count = data?.count ?? 0;
+
+  // Memoized form data
+  const memoizedInitialData = useMemo(() => {
+    if (!editingEvent) return EMPTY_EVENT_DATA;
+
+    return {
+      ...editingEvent,
+      image: null,
+      existingImage: editingEvent.image || undefined,
+      category: editingEvent.category ? { id: editingEvent.category.id } : null,
+      tags: editingEvent.tags || [],
+      start_time: editingEvent.start_time || null,
+      end_time: editingEvent.end_time || null,
+      capacity: editingEvent.capacity ?? 0,
+      allow_waitlist: editingEvent.allow_waitlist ?? false,
+    };
+  }, [editingEvent]);
+
+  // Handlers
+  const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(event.target.value);
   };
 
-  const handleDateFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const value = e.target.value;
-    setDateFilter(value);
-
-    const params = new URLSearchParams(Array.from(searchParams.entries()));
-    if (searchTerm) {
-      params.set("search", searchTerm);
-    }
-    if (value) {
-      params.set("date_filter", value);
-    } else {
-      params.delete("date_filter");
-    }
-
-    router.replace(`/user/dashboard/organizer/events?${params.toString()}`);
+  const handleDateFilterChange = (
+    event: React.ChangeEvent<HTMLSelectElement>
+  ) => {
+    setDateFilter(event.target.value);
   };
 
-  // Create / Update
+  // Pagination
+  const goNext = () => {
+    if (data?.next) {
+      const url = new URL(
+        data.next,
+        typeof window !== "undefined"
+          ? window.location.origin
+          : "http://localhost"
+      );
+      const p = Number(url.searchParams.get("page") || page + 1);
+      setPage(p);
+      if (typeof window !== "undefined")
+        window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
+
+  const goPrev = () => {
+    if (data?.previous) {
+      const url = new URL(
+        data.previous,
+        typeof window !== "undefined"
+          ? window.location.origin
+          : "http://localhost"
+      );
+      const p = Number(url.searchParams.get("page") || Math.max(1, page - 1));
+      setPage(p);
+      if (typeof window !== "undefined")
+        window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
+
+  // --- Create / Update ---
   const handleFormSubmit = async (form: EventFormData) => {
     if (!user) return;
     setSubmitting(true);
@@ -203,9 +241,7 @@ export default function OrganizerEventsPage() {
       formData.append("category_id", String(form.category.id));
     }
     formData.append("tags", JSON.stringify(form.tags));
-    if (form.image instanceof File) {
-      formData.append("image", form.image);
-    }
+    if (form.image instanceof File) formData.append("image", form.image);
     if (form.start_time) formData.append("start_time", form.start_time);
     if (form.end_time) formData.append("end_time", form.end_time);
     formData.append("venue", form.venue);
@@ -216,39 +252,53 @@ export default function OrganizerEventsPage() {
     formData.append("allow_waitlist", String(form.allow_waitlist));
     formData.append("organizer", String(user.id));
 
-    const result = await safeApiFetch(endpoint, {
-      method,
-      body: formData,
-      headers: {},
-    });
+    try {
+      const result = await safeApiFetch(endpoint, {
+        method,
+        body: formData,
+        headers: {},
+      });
 
-    if (result) {
-      toast.success(`Event ${isEdit ? "updated" : "created"} successfully!`);
-      setShowFormModal(false);
-      setEditingEvent(null);
-      loadEvents(searchTerm, dateFilter, currentPage);
-    } else {
-      toast.error("Failed to save event. Please try again.");
+      if (result) {
+        toast.success(`Event ${isEdit ? "updated" : "created"} successfully!`);
+        setShowFormModal(false);
+        setEditingEvent(null);
+        mutate(swrKey);
+      } else {
+        toast.error("Failed to save event. Please try again.");
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        toast.error(err.message);
+      } else {
+        toast.error("Failed to save event. Please try again.");
+      }
+    } finally {
+      setSubmitting(false);
     }
-
-    setSubmitting(false);
   };
 
-  // Delete
+  // --- Delete ---
   const confirmDelete = async () => {
     if (eventToDelete === null) return;
 
-    const result = await safeApiFetch(`/api/events/${eventToDelete}/`, {
-      method: "DELETE",
-    });
+    try {
+      await safeApiFetch(`/api/events/${eventToDelete}/`, {
+        method: "DELETE",
+      });
 
-    if (result !== null) {
       toast.success("Event deleted successfully!");
-      loadEvents(searchTerm, dateFilter, currentPage);
+      mutate(swrKey);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        toast.error(err.message);
+      } else {
+        toast.error("Failed to delete event.");
+      }
+    } finally {
+      setShowDeleteConfirm(false);
+      setEventToDelete(null);
     }
-
-    setShowDeleteConfirm(false);
-    setEventToDelete(null);
   };
 
   return (
@@ -290,8 +340,10 @@ export default function OrganizerEventsPage() {
       </div>
 
       {/* Event List */}
-      {loading ? (
+      {isLoading ? (
         <LoadingSpinner />
+      ) : error ? (
+        <p className="text-red-500">Failed to load events.</p>
       ) : events.length === 0 ? (
         <p className="text-gray-500">No events found.</p>
       ) : (
@@ -390,15 +442,15 @@ export default function OrganizerEventsPage() {
       {events.length > 0 && (
         <div className="flex flex-col sm:flex-row items-center justify-between mt-6 gap-3">
           <span className="text-sm text-gray-600">
-            Page {currentPage} — Showing <b>{events.length}</b> of{" "}
-            <b>{count}</b> events
+            Page {page} — Showing <b>{events.length}</b> of <b>{count}</b>{" "}
+            events
           </span>
           <div className="flex gap-2 w-full sm:w-auto justify-center">
             <button
-              onClick={() => goToPage(Math.max(1, currentPage - 1))}
-              disabled={!prevUrl}
+              onClick={goPrev}
+              disabled={!data?.previous}
               className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md font-medium transition w-full sm:w-auto ${
-                prevUrl
+                data?.previous
                   ? "bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-white"
                   : "opacity-50 cursor-not-allowed"
               }`}
@@ -406,10 +458,10 @@ export default function OrganizerEventsPage() {
               <ArrowLeft size={16} /> Prev
             </button>
             <button
-              onClick={() => goToPage(currentPage + 1)}
-              disabled={!nextUrl}
+              onClick={goNext}
+              disabled={!data?.next}
               className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md font-medium transition w-full sm:w-auto ${
-                nextUrl
+                data?.next
                   ? "bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-white"
                   : "opacity-50 cursor-not-allowed"
               }`}

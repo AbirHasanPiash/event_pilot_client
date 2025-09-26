@@ -241,14 +241,6 @@ export default function EventDetailsPage() {
 
           {/* Schedule Timeline */}
           <ScheduleTimeline />
-          <div className="mt-8">
-            <button
-              onClick={handleBack}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
-            >
-              ← Back to Events
-            </button>
-          </div>
         </div>
 
         {/* Sidebar */}

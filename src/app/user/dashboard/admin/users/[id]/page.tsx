@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
-import UpdateRoleModal from "@/components/UpdateRoleModal";
-import ConfirmModal from "@/components/ConfirmModal";
+import useSWR from "swr";
 import { toast } from "react-hot-toast";
 import { useSafeApiFetch } from "@/lib/apiWrapper";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import UpdateRoleModal from "@/components/UpdateRoleModal";
+import ConfirmModal from "@/components/ConfirmModal";
 
 interface UserItem {
   id: number;
@@ -22,47 +23,42 @@ export default function UserDetailsPage() {
   const { id } = useParams();
   const safeApiFetch = useSafeApiFetch();
 
-  const [user, setUser] = useState<UserItem | null>(null);
-  const [loading, setLoading] = useState(true);
-
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  // Fetch user details
-  const fetchUser = useCallback(async () => {
-    setLoading(true);
-    const data = await safeApiFetch<UserItem>(`/api/users/${id}/`);
-    if (data) {
-      setUser(data);
-    } else {
-      toast.error("Failed to fetch user details.");
-      router.push("/user/dashboard/admin/users");
-    }
-    setLoading(false);
-  }, [id, safeApiFetch, router]);
+  // SWR fetcher
+  const fetcher = useCallback(
+    (url: string) => safeApiFetch<UserItem>(url),
+    [safeApiFetch]
+  );
 
-  useEffect(() => {
-    fetchUser();
-  }, [fetchUser]);
+  // SWR hook
+  const { data: user, error, isLoading, mutate } = useSWR(
+    id ? `/api/users/${id}/` : null,
+    fetcher,
+    { revalidateOnFocus: false }
+  );
 
   // Handle role update
-  const handleRoleUpdate = async (payload: {
+  const handleRoleUpdate = async ({
+    id,
+    role,
+  }: {
     id: number;
     role: string | null;
   }) => {
     setSubmitting(true);
     try {
-      const result = await safeApiFetch(`/api/users/${payload.id}/set_role/`, {
+      const result = await safeApiFetch(`/api/users/${id}/set_role/`, {
         method: "PATCH",
-        body: JSON.stringify({ role: payload.role }),
+        body: JSON.stringify({ role }),
       });
-
       if (result) {
         toast.success("User role updated successfully!");
         setShowUpdateModal(false);
-        setUser((prev) => (prev ? { ...prev, role: payload.role } : prev));
+        mutate(); // refresh user data
       } else {
         toast.error("Failed to update role.");
       }
@@ -94,7 +90,7 @@ export default function UserDetailsPage() {
     }
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
         <LoadingSpinner />
@@ -102,7 +98,11 @@ export default function UserDetailsPage() {
     );
   }
 
-  if (!user) return null;
+  if (error || !user) {
+    toast.error("Failed to fetch user details.");
+    router.push("/user/dashboard/admin/users");
+    return null;
+  }
 
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-8">

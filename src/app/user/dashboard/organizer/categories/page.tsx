@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import useSWR from "swr";
+import { Pencil, Plus, Trash2, Search } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { useSafeApiFetch } from "@/lib/apiWrapper";
 import ConfirmModal from "@/components/ConfirmModal";
@@ -24,13 +25,57 @@ interface Category {
 
 export default function OrganizerCategoriesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const safeApiFetch = useSafeApiFetch();
 
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [, setCount] = useState(0);
+  // URL state
+  const initialSearch = searchParams.get("search") || "";
+  const initialPage = Number(searchParams.get("page") || 1);
 
-  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState(initialSearch);
+  const [page, setPage] = useState(initialPage);
 
+  // debounce search
+  const [debouncedSearch, setDebouncedSearch] = useState(searchTerm);
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchTerm), 450);
+    return () => clearTimeout(t);
+  }, [searchTerm]);
+
+  // Build query string
+  const buildQuery = useCallback(
+    (pageNum = page, search = debouncedSearch) => {
+      const params = new URLSearchParams();
+      params.set("page", String(pageNum));
+      if (search) params.set("search", search);
+      return params.toString();
+    },
+    [page, debouncedSearch]
+  );
+
+  // SWR key
+  const swrKey = useMemo(
+    () => `/api/categories/?${buildQuery(page)}`,
+    [page, buildQuery]
+  );
+
+  // SWR fetcher
+  const fetcher = useCallback(
+    (url: string) => safeApiFetch<PaginatedResponse<Category>>(url),
+    [safeApiFetch]
+  );
+
+  const { data, error, isLoading, mutate } = useSWR<
+    PaginatedResponse<Category> | null
+  >(swrKey, fetcher);
+
+  useEffect(() => {
+    if (error instanceof Error) {
+      toast.error(error.message);
+    }
+  }, [error]);
+
+  // --- CRUD state ---
   const [showFormModal, setShowFormModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -38,54 +83,13 @@ export default function OrganizerCategoriesPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [categoryToDelete, setCategoryToDelete] = useState<number | null>(null);
 
-  const searchParams = useSearchParams();
-  const initialSearch = searchParams.get("search") || "";
-  const [searchTerm, setSearchTerm] = useState(initialSearch);
-
-  // Load categories
-  const loadCategories = useCallback(
-    async (query = "") => {
-      setLoading(true);
-      const data = await safeApiFetch<PaginatedResponse<Category>>(
-        `/api/categories/?search=${encodeURIComponent(query)}`
-      );
-      if (data) {
-        setCategories(data.results);
-        setCount(data.count);
-      }
-      setLoading(false);
-    },
-    [safeApiFetch]
-  );
-
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setSearchTerm(value);
-
-    const params = new URLSearchParams(Array.from(searchParams.entries()));
-    if (value) {
-      params.set("search", value);
-    } else {
-      params.delete("search");
-    }
-    router.replace(`/user/dashboard/organizer/categories?${params.toString()}`);
-  };
-
-  useEffect(() => {
-    const delay = setTimeout(() => {
-      loadCategories(searchTerm);
-    }, 500);
-    return () => clearTimeout(delay);
-  }, [searchTerm, loadCategories]);
-
-  // Handle Create / Update
+  // --- CRUD handlers ---
   const handleFormSubmit = async (form: {
     id?: number | null;
     name: string;
     description: string;
   }) => {
     setSubmitting(true);
-
     const isEdit = !!form.id;
     const method = isEdit ? "PUT" : "POST";
     const endpoint = isEdit
@@ -104,37 +108,50 @@ export default function OrganizerCategoriesPage() {
       toast.success(`Category ${isEdit ? "updated" : "created"} successfully!`);
       setShowFormModal(false);
       setEditingCategory(null);
-      loadCategories();
+      mutate(); // refresh SWR cache
     } else {
       toast.error("Failed to save category. Please try again.");
     }
-
     setSubmitting(false);
   };
 
-  // Handle Delete
   const confirmDelete = async () => {
     if (categoryToDelete === null) return;
 
-    const result = await safeApiFetch(
-      `/api/categories/${categoryToDelete}/`,
-      {
-        method: "DELETE",
-      }
-    );
+    const result = await safeApiFetch(`/api/categories/${categoryToDelete}/`, {
+      method: "DELETE",
+    });
 
     if (result !== null) {
       toast.success("Category deleted successfully!");
-      loadCategories();
+      mutate();
     }
-
     setShowDeleteConfirm(false);
     setCategoryToDelete(null);
   };
 
+  // Pagination helpers
+  const goNext = () => {
+    if (data?.next) {
+      const url = new URL(data.next, window.location.origin);
+      const p = Number(url.searchParams.get("page") || page + 1);
+      setPage(p);
+    }
+  };
+  const goPrev = () => {
+    if (data?.previous) {
+      const url = new URL(data.previous, window.location.origin);
+      const p = Number(url.searchParams.get("page") || Math.max(1, page - 1));
+      setPage(p);
+    }
+  };
+
+  // categories
+  const categories = data?.results || [];
+
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-8">
-      {/* Header + Create Button */}
+      {/* Header + Create */}
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-semibold">My Categories</h2>
         <button
@@ -148,18 +165,20 @@ export default function OrganizerCategoriesPage() {
         </button>
       </div>
 
-      <div className="flex justify-between items-center">
+      {/* Search */}
+      <div className="relative w-full max-w-sm">
+        <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
         <input
           type="text"
           placeholder="Search categories..."
           value={searchTerm}
-          onChange={handleSearchChange}
-          className="w-full max-w-sm px-4 py-2 border rounded dark:bg-gray-800 border-gray-300 dark:border-gray-600"
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="w-full pl-10 pr-3 py-2 border rounded dark:bg-gray-800 border-gray-300 dark:border-gray-600"
         />
       </div>
 
       {/* Category List */}
-      {loading ? (
+      {isLoading ? (
         <LoadingSpinner />
       ) : categories.length === 0 ? (
         <p className="text-gray-500">No categories found.</p>
@@ -207,6 +226,33 @@ export default function OrganizerCategoriesPage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {categories.length > 0 && (
+        <div className="mt-8 flex items-center justify-between gap-4">
+          <div className="text-sm text-gray-600 dark:text-gray-400">
+            Page <span className="font-medium">{page}</span> — showing{" "}
+            <span className="font-medium">{categories.length}</span> of{" "}
+            <span className="font-medium">{data?.count ?? "—"}</span> categories
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={goPrev}
+              disabled={!data?.previous || isLoading}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-md border bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-sm disabled:opacity-50"
+            >
+              Prev
+            </button>
+            <button
+              onClick={goNext}
+              disabled={!data?.next || isLoading}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-md bg-indigo-600 text-white text-sm hover:bg-indigo-700 disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
         </div>
       )}
 

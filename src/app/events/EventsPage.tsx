@@ -135,7 +135,6 @@ export default function EventsPage() {
     }
 
     prevRef.current = { page, dateFilter, debouncedSearch };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, dateFilter, debouncedSearch, router, buildQuery]);
 
 

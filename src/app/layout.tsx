@@ -69,7 +69,7 @@ export default function RootLayout({
           <SWRProvider>
             <AuthProvider>
               <Toaster position="top-right" />
-              <main className="flex flex-col min-h-screen">
+              <main className="flex flex-col bg-white dark:bg-black min-h-screen">
                 <Navbar />
                 <div className="flex-grow">{children}</div>
                 <Footer />

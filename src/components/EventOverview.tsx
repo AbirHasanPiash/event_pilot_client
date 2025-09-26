@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback } from "react";
 import { motion } from "framer-motion";
 import { useSafeApiFetch } from "@/lib/apiWrapper";
+import useSWR from "swr";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import dayjs from "dayjs";
 import { Users, Calendar, Activity, Award, Star } from "lucide-react";
@@ -38,35 +39,17 @@ interface OverviewResponse {
 
 export default function EventOverview() {
   const safeApiFetch = useSafeApiFetch();
-  const [data, setData] = useState<OverviewResponse | null>(null);
-  const [loading, setLoading] = useState(true);
 
-  // Fetch with sessionStorage cache
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const cached = sessionStorage.getItem("event_overview");
-      if (cached) {
-        setData(JSON.parse(cached));
-        setLoading(false);
-      }
-    }
+  const fetcher = useCallback(
+    async (url: string): Promise<OverviewResponse> => {
+      const res = await safeApiFetch<OverviewResponse | null>(url);
+      if (!res) throw new Error("No data");
+      return res;
+    },
+    [safeApiFetch]
+  );
 
-    const fetchData = async () => {
-      try {
-        const response = await safeApiFetch<OverviewResponse>("/api/overview/");
-        if (response) {
-          setData(response);
-          if (typeof window !== "undefined") {
-            sessionStorage.setItem("event_overview", JSON.stringify(response));
-          }
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [safeApiFetch]);
+  const { data, isLoading: loading } = useSWR<OverviewResponse>("/api/overview/", fetcher);
 
   if (loading) {
     return (

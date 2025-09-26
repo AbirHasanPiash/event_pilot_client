@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import useSWR from "swr";
 import { Pencil, Trash2, ArrowLeft, ArrowRight, Search } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { useSafeApiFetch } from "@/lib/apiWrapper";
@@ -10,7 +11,6 @@ import UpdateRoleModal from "@/components/UpdateRoleModal";
 import ConfirmModal from "@/components/ConfirmModal";
 import type { UserItem } from "@/types/users";
 
-
 interface PaginatedResponse<T> {
   count: number;
   next: string | null;
@@ -18,27 +18,17 @@ interface PaginatedResponse<T> {
   results: T[];
 }
 
-
 export default function AdminUsersPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const safeApiFetch = useSafeApiFetch();
 
-  const [users, setUsers] = useState<UserItem[]>([]);
-  const [count, setCount] = useState(0);
-  const [nextUrl, setNextUrl] = useState<string | null>(null);
-  const [prevUrl, setPrevUrl] = useState<string | null>(null);
-
-  const [searchTerm, setSearchTerm] = useState(
-    searchParams.get("search") || ""
-  );
+  const [searchTerm, setSearchTerm] = useState(searchParams.get("search") || "");
   const [currentPage, setCurrentPage] = useState(
     parseInt(searchParams.get("page") || "1", 10)
   );
 
-  const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [editingUser, setEditingUser] = useState<UserItem | null>(null);
 
@@ -46,57 +36,47 @@ export default function AdminUsersPage() {
   const [deletingUser, setDeletingUser] = useState<UserItem | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  // Utility: update URL params
+  // SWR fetcher
+  const fetcher = useCallback(
+    (url: string) => safeApiFetch<PaginatedResponse<UserItem>>(url),
+    [safeApiFetch]
+  );
+
+  // Build API URL
+  const apiUrl = useMemo(() => {
+    const params = new URLSearchParams();
+    if (searchTerm) params.set("search", searchTerm);
+    params.set("page", String(currentPage));
+    return `/api/users/?${params.toString()}`;
+  }, [searchTerm, currentPage]);
+
+  // SWR hook
+  const { data, error, isLoading, mutate } = useSWR(apiUrl, fetcher, {
+    revalidateOnFocus: false,
+  });
+
+  const users = data?.results ?? [];
+  const count = data?.count ?? 0;
+  const nextUrl = data?.next;
+  const prevUrl = data?.previous;
+
+  // Update URL in browser
   const updateUrl = useCallback(
-    (newSearch: string, newPage: number) => {
+    (search: string, page: number) => {
       const params = new URLSearchParams();
-      if (newSearch) params.set("search", newSearch);
-      params.set("page", String(newPage));
+      if (search) params.set("search", search);
+      params.set("page", String(page));
       router.replace(`/user/dashboard/admin/users?${params.toString()}`);
     },
     [router]
   );
 
-  // Fetch users
-  const loadUsers = useCallback(
-    async (query: string, page: number) => {
-      setLoading(true);
-      const url = `/api/users/?search=${encodeURIComponent(
-        query
-      )}&page=${page}`;
-      const data = await safeApiFetch<PaginatedResponse<UserItem>>(url);
-      if (data) {
-        setUsers(data.results);
-        setCount(data.count);
-        setNextUrl(data.next);
-        setPrevUrl(data.previous);
-      }
-      setLoading(false);
-    },
-    [safeApiFetch]
-  );
-
-  // Sync search + page changes
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      setCurrentPage(1);
-      updateUrl(searchTerm, 1);
-      loadUsers(searchTerm, 1);
-    }, 450);
-    return () => clearTimeout(timeout);
-  }, [searchTerm, updateUrl, loadUsers]);
-
-  useEffect(() => {
-    loadUsers(searchTerm, currentPage);
-  }, [currentPage, searchTerm, loadUsers]);
-
-  // Initial load
-  useEffect(() => {
-    loadUsers(searchTerm, currentPage);
-  }, [searchTerm, currentPage, loadUsers]);
-
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) =>
-    setSearchTerm(e.target.value);
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearchTerm(value);
+    setCurrentPage(1);
+    updateUrl(value, 1);
+  };
 
   const openUpdateModal = (user: UserItem) => {
     setEditingUser(user);
@@ -118,7 +98,7 @@ export default function AdminUsersPage() {
       });
       if (result) {
         toast.success("User role updated successfully!");
-        setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, role } : u)));
+        mutate(); // refresh SWR cache
         setShowUpdateModal(false);
         setEditingUser(null);
       } else toast.error("Failed to update role.");
@@ -143,7 +123,7 @@ export default function AdminUsersPage() {
       });
       if (result !== null) {
         toast.success("User deleted successfully!");
-        setUsers((prev) => prev.filter((u) => u.id !== deletingUser.id));
+        mutate();
         setShowDeleteModal(false);
         setDeletingUser(null);
       } else toast.error("Failed to delete user.");
@@ -184,9 +164,13 @@ export default function AdminUsersPage() {
         Showing <b>{users.length}</b> of <b>{count}</b> users
       </div>
 
-      {loading ? (
+      {isLoading ? (
         <div className="py-12">
           <LoadingSpinner />
+        </div>
+      ) : error ? (
+        <div className="py-12 text-center text-red-500">
+          Failed to load users.
         </div>
       ) : users.length === 0 ? (
         <div className="py-12 text-center text-gray-500">No users found.</div>
@@ -220,7 +204,7 @@ export default function AdminUsersPage() {
                     <td className="px-6 py-4">
                       <button
                         onClick={() => navigateToDetails(u.id)}
-                        className="hover:text-indigo-600 text-medium cursor-pointer"
+                        className="hover:text-indigo-600 cursor-pointer"
                       >
                         {u.first_name} {u.last_name}
                       </button>
@@ -286,7 +270,7 @@ export default function AdminUsersPage() {
                   <h3 className="font-medium">
                     <button
                       onClick={() => navigateToDetails(u.id)}
-                      className="font-medium hover:text-indigo-600 cursor-pointer"
+                      className="hover:text-indigo-600 cursor-pointer"
                     >
                       {u.first_name} {u.last_name}
                     </button>

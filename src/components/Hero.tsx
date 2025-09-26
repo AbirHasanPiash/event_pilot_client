@@ -13,7 +13,7 @@ export default function Hero() {
 
   const handleOrganizerClick = () => {
     if (!user) {
-      toast.error("Please sign up or log in first.");
+      router.push("/auth/register");
       return;
     }
 

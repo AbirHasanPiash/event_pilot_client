@@ -1,17 +1,19 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { toast } from "react-hot-toast";
-import { Pencil, Trash2, Calendar, MapPin, Users } from "lucide-react";
-import { useSafeApiFetch } from "@/lib/apiWrapper";
-import EventModal from "@/components/EventModal";
-import ConfirmModal from "@/components/ConfirmModal";
+import { useCallback, useMemo, useState, useEffect } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
+import useSWR from "swr";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
+import { toast } from "react-hot-toast";
+import { Pencil, Trash2, Calendar, MapPin, Users } from "lucide-react";
+
+import { useSafeApiFetch } from "@/lib/apiWrapper";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import EventModal from "@/components/EventModal";
+import ConfirmModal from "@/components/ConfirmModal";
 import ScheduleModal from "@/components/ScheduleModal";
 import ScheduleTimeline from "@/components/ScheduleTimeline";
 import { Event, EventFormData } from "@/types/events";
@@ -19,93 +21,50 @@ import { Event, EventFormData } from "@/types/events";
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
-
 interface ScheduleInput {
-  start_datetime?: string | Date | null;
-  end_datetime?: string | Date | null;
+  start_datetime?: string | null;
+  end_datetime?: string | null;
   title?: string;
   agenda?: string;
 }
 
-
 export default function OrganizerEventDetailPage() {
   const { id } = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const safeApiFetch = useSafeApiFetch();
-
-  const [event, setEvent] = useState<Event | null>(null);
-  const [loading, setLoading] = useState(true);
 
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
 
-  const handleScheduleSubmit = async (schedules: ScheduleInput[]) => {
-    // minimal client-side validation & normalization
-    const payload = schedules
-      .map((s) => {
-        const start = s.start_datetime
-          ? new Date(s.start_datetime).toISOString()
-          : null;
-        const end = s.end_datetime
-          ? new Date(s.end_datetime).toISOString()
-          : null;
-        return {
-          start_datetime: start,
-          end_datetime: end,
-          title: s.title?.trim() || "",
-          agenda: s.agenda?.trim() || "",
-        };
-      })
-      .filter((s) => s.start_datetime && s.title); // require start + title
+  // SWR key
+  const swrKey = useMemo(() => (id ? `/api/events/${id}/` : null), [id]);
 
-    if (payload.length === 0) {
-      toast.error(
-        "Please add at least one valid schedule with title and start time."
-      );
-      return;
-    }
+  // SWR fetcher
+  const fetcher = useCallback(
+    (url: string) => safeApiFetch<Event>(url),
+    [safeApiFetch]
+  );
 
-    const result = await safeApiFetch(
-      `/api/events/${event?.id}/schedules/bulk/`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ schedules: payload }),
-      }
-    );
+  // SWR hook
+  const {
+    data: event,
+    error,
+    isLoading,
+    mutate,
+  } = useSWR<Event | null>(swrKey, fetcher);
 
-    if (result) {
-      toast.success("Schedules created successfully!");
-      // refresh schedules or event
-    } else {
-      toast.error("Failed to create schedules.");
-    }
-  };
-
-  const fetchEvent = useCallback(async () => {
-    setLoading(true);
-    const data = await safeApiFetch<Event>(`/api/events/${id}/`);
-    if (data) setEvent(data);
-    else router.push("/user/dashboard/admin/events");
-    setLoading(false);
-  }, [id, router, safeApiFetch]);
-
+  // Error toast
   useEffect(() => {
-    fetchEvent();
-  }, [fetchEvent]);
+    if (error instanceof Error) {
+      toast.error(error.message);
+      router.push("/user/dashboard/organizer/events");
+    }
+  }, [error, router]);
 
-  const memoizedInitialData = useMemo(() => {
-    return event
-      ? {
-          ...event,
-          image: null,
-          existingImage: event?.image || null,
-        }
-      : {};
-  }, [event]);
-
+  // -------------------- Update Event --------------------
   const handleUpdate = async (form: EventFormData) => {
     if (!event) return;
     setSubmitting(true);
@@ -113,13 +72,9 @@ export default function OrganizerEventDetailPage() {
     const formData = new FormData();
     formData.append("title", form.title);
     formData.append("description", form.description);
-    if (form.category?.id) {
-      formData.append("category_id", String(form.category.id));
-    }
+    if (form.category?.id) formData.append("category_id", String(form.category.id));
     formData.append("tags", JSON.stringify(form.tags));
-    if (form.image instanceof File) {
-      formData.append("image", form.image);
-    }
+    if (form.image instanceof File) formData.append("image", form.image);
     if (form.start_time) formData.append("start_time", form.start_time);
     if (form.end_time) formData.append("end_time", form.end_time);
     formData.append("venue", form.venue);
@@ -129,36 +84,101 @@ export default function OrganizerEventDetailPage() {
     formData.append("capacity", String(form.capacity));
     formData.append("allow_waitlist", String(form.allow_waitlist));
 
-    const result = await safeApiFetch(`/api/events/${event.id}/`, {
-      method: "PUT",
-      body: formData,
-      headers: {},
-    });
+    try {
+      const updated = await safeApiFetch<Event>(`/api/events/${event.id}/`, {
+        method: "PUT",
+        body: formData,
+      });
 
-    if (result) {
-      toast.success("Event updated successfully!");
-      setShowEditModal(false);
-      fetchEvent();
-    } else {
+      if (updated) {
+        await mutate(updated, false);
+        toast.success("Event updated successfully!");
+        setShowEditModal(false);
+      }
+    } catch {
       toast.error("Failed to update event.");
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitting(false);
   };
 
+  // -------------------- Delete Event --------------------
   const handleDelete = async () => {
     if (!event) return;
-    const result = await safeApiFetch(`/api/events/${event.id}/`, {
-      method: "DELETE",
-    });
-    if (result !== null) {
-      toast.success("Event deleted successfully!");
-      router.push("/user/dashboard/admin/events");
+    try {
+      const result = await safeApiFetch(`/api/events/${event.id}/`, {
+        method: "DELETE",
+      });
+      if (result !== null) {
+        toast.success("Event deleted successfully!");
+        router.push("/user/dashboard/organizer/events");
+      }
+    } catch {
+      toast.error("Failed to delete event.");
     }
   };
 
-  if (loading || !event) {
-    return <LoadingSpinner />;
-  }
+  // -------------------- Add Schedules --------------------
+  const handleScheduleSubmit = async (schedules: ScheduleInput[]) => {
+    if (!event) return;
+
+    const payload = schedules
+      .map((s) => ({
+        start_datetime: s.start_datetime ? new Date(s.start_datetime).toISOString() : null,
+        end_datetime: s.end_datetime ? new Date(s.end_datetime).toISOString() : null,
+        title: s.title?.trim() || "",
+        agenda: s.agenda?.trim() || "",
+      }))
+      .filter((s) => s.start_datetime && s.title);
+
+    if (payload.length === 0) {
+      toast.error("Please add at least one valid schedule with title and start time.");
+      return;
+    }
+
+    try {
+      const result = await safeApiFetch(`/api/events/${event.id}/schedules/bulk/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ schedules: payload }),
+      });
+
+      if (result) {
+        toast.success("Schedules created successfully!");
+        await mutate();
+      }
+    } catch {
+      toast.error("Failed to create schedules.");
+    }
+  };
+
+  // -------------------- Back Button --------------------
+  const handleBack = () => {
+    if (document.referrer.includes("/organizer/events")) {
+      router.back();
+    } else {
+      const fromQs = searchParams.get("from");
+      const lastListUrl = fromQs
+        ? `/user/dashboard/organizer/events?${decodeURIComponent(fromQs)}`
+        : sessionStorage.getItem("organizer_events_last_list_url") ||
+          "/user/dashboard/organizer/events";
+      router.push(lastListUrl);
+    }
+  };
+
+  // -------------------- Memoized Data for Edit Modal --------------------
+  const memoizedInitialData = useMemo(() => {
+    if (!event) return null;
+    return {
+      ...event,
+      image: null,
+      existingImage: event.image || undefined,
+      category_id: event.category?.id || null,
+    };
+  }, [event]);
+
+  if (isLoading) return <LoadingSpinner />;
+  if (!event) return null;
 
   return (
     <div className="max-w-6xl mx-auto p-4 md:p-6 space-y-6">
@@ -181,23 +201,17 @@ export default function OrganizerEventDetailPage() {
         </div>
       </div>
 
-      {/* Layout: Image + Details */}
+      {/* Image + Details */}
       <div className="grid md:grid-cols-3 gap-6">
-        {/* Image */}
         <div className="relative w-full h-48 md:h-56 rounded-lg overflow-hidden border border-gray-200 dark:border-white/10 shadow">
           <Image
-            src={
-              event.image && event.image.trim() !== ""
-                ? event.image
-                : "/placeholder.jpeg"
-            }
+            src={event.image?.trim() ? event.image : "/placeholder.jpeg"}
             alt={event.title}
             fill
             className="object-cover"
           />
         </div>
 
-        {/* Info */}
         <div className="md:col-span-2 space-y-4">
           <div className="flex flex-wrap gap-2">
             {event.category && (
@@ -221,14 +235,12 @@ export default function OrganizerEventDetailPage() {
                 {dayjs(event.end_time).format("MMM D, YYYY h:mm A")}
               </span>
             </div>
-
             <div className="flex items-start gap-2">
               <MapPin className="text-indigo-500" size={18} />
               <span>
-                {event.venue}
+                {event.venue}{" "}
                 {event.location_map_url && (
                   <>
-                    {" "}
                     -{" "}
                     <a
                       href={event.location_map_url}
@@ -241,7 +253,6 @@ export default function OrganizerEventDetailPage() {
                 )}
               </span>
             </div>
-
             <div className="flex items-start gap-2">
               <Users className="text-indigo-500" size={18} />
               <span>
@@ -256,15 +267,12 @@ export default function OrganizerEventDetailPage() {
                 </span>
               </span>
             </div>
-
             <div className="flex items-start gap-2">
               <Users className="text-green-500" size={18} />
               <span>
-                Attending:{" "}
-                <span className="font-medium">{event.attending_count}</span>
+                Attending: <span className="font-medium">{event.attending_count}</span>
               </span>
             </div>
-
             <div className="flex items-start gap-2">
               <Users className="text-yellow-500" size={18} />
               <span>
@@ -272,10 +280,8 @@ export default function OrganizerEventDetailPage() {
                 <span className="font-medium">{event.interested_count}</span>
               </span>
             </div>
-
             <div className="flex items-start gap-2">
-              <span className="font-medium">Organizer:</span>{" "}
-              {event.organizer_name}
+              <span className="font-medium">Organizer:</span> {event.organizer_name}
             </div>
           </div>
         </div>
@@ -303,7 +309,7 @@ export default function OrganizerEventDetailPage() {
         </div>
       )}
 
-      {/* Schedules Button */}
+      {/* Schedules */}
       <div>
         <button
           onClick={() => setShowScheduleModal(true)}
@@ -323,16 +329,14 @@ export default function OrganizerEventDetailPage() {
         mainEnd={event.end_time}
       />
 
-      {/* Edit Modal */}
       <EventModal
         isOpen={showEditModal}
         onClose={() => setShowEditModal(false)}
         onSubmit={handleUpdate}
-        initialData={memoizedInitialData}
+        initialData={memoizedInitialData || undefined}
         loading={submitting}
       />
 
-      {/* Delete Confirm */}
       <ConfirmModal
         isOpen={showDeleteConfirm}
         title="Delete Event?"
@@ -341,6 +345,16 @@ export default function OrganizerEventDetailPage() {
         onConfirm={handleDelete}
         confirmText="Delete"
       />
+
+      {/* Back Button */}
+      <div className="pt-4">
+        <button
+          onClick={handleBack}
+          className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+        >
+          Back to Events
+        </button>
+      </div>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import dayjs from "dayjs";
@@ -19,6 +19,7 @@ import {
 
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { useSafeApiFetch } from "@/lib/apiWrapper";
+import useSWR from "swr";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -59,26 +60,8 @@ interface UserDashboardResponse {
   archived?: EventItem[];
 }
 
-const LS_KEY = "eventpilot_user_dashboard_v1";
-const REVALIDATE_MS = 2 * 60 * 1000; // 2 minutes
 const POLL_MS = 2 * 60 * 1000; // poll every 2 minutes
-
-function safeLocalGet<T>(key: string): { data: T; ts: number } | null {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
-function safeLocalSet<T>(key: string, value: { data: T; ts: number }) {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // ignore quota error
-  }
-}
+const PAGE_SIZE = 9;
 
 function AvatarFallback({ title }: { title: string }) {
   return (
@@ -239,73 +222,34 @@ export default function UserDashboardPage() {
   const safeApiFetch = useSafeApiFetch();
   const router = useRouter();
 
-  const [data, setData] = useState<UserDashboardResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<
     "today" | "ongoing" | "upcoming" | "archived"
   >("today");
-  const pollRef = useRef<number | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
 
-  const readCache = useCallback(() => {
-    const cached = safeLocalGet<UserDashboardResponse>(LS_KEY);
-    if (cached) {
-      setData(cached.data);
-      setLastUpdated(cached.ts);
-      setLoading(false);
-      return cached;
-    }
-    return null;
-  }, []);
-
-  const writeCache = useCallback((payload: UserDashboardResponse) => {
-    const wrapper = { data: payload, ts: Date.now() };
-    safeLocalSet(LS_KEY, wrapper);
-    setData(payload);
-    setLastUpdated(wrapper.ts);
-  }, []);
-
-  const fetchFresh = useCallback(
-    async (showToast = false) => {
-      setError(null);
-      try {
-        const res = await safeApiFetch<UserDashboardResponse>(
-          "/api/dashboard/user/"
-        );
-        if (!res) throw new Error("No data");
-        writeCache(res);
-        if (showToast) {
-          // use toast if you want: toast.success("Refreshed");
-        }
-      } catch {
-        setError("Failed to load dashboard");
-      } finally {
-        setLoading(false);
-      }
+  const fetcher = useCallback(
+    async (url: string): Promise<UserDashboardResponse> => {
+      const res = await safeApiFetch<UserDashboardResponse | null>(url);
+      if (!res) throw new Error("No data");
+      return res;
     },
-    [safeApiFetch, writeCache]
+    [safeApiFetch]
   );
 
-  // initial: show cached then revalidate if stale
+  const {
+    data,
+    error,
+    isLoading: loading,
+    mutate,
+  } = useSWR<UserDashboardResponse>("/api/dashboard/user/", fetcher, {
+    refreshInterval: POLL_MS,
+    onSuccess: () => setLastUpdated(Date.now()),
+  });
+
   useEffect(() => {
-    const cached = readCache();
-    const isStale = !cached || Date.now() - (cached.ts ?? 0) > REVALIDATE_MS;
-    if (isStale) {
-      fetchFresh(false);
-    } else {
-      setLoading(false);
-    }
-
-    // polling
-    if (pollRef.current) window.clearInterval(pollRef.current);
-    pollRef.current = window.setInterval(() => fetchFresh(false), POLL_MS);
-
-    return () => {
-      if (pollRef.current) window.clearInterval(pollRef.current);
-      pollRef.current = null;
-    };
-  }, [fetchFresh, readCache]);
+    setCurrentPage(1);
+  }, [activeTab]);
 
   // compute counts (safe)
   const counts = useMemo(() => {
@@ -327,6 +271,24 @@ export default function UserDashboardPage() {
     };
   }, [data]);
 
+  const tabList = useMemo((): EventItem[] => {
+    switch (activeTab) {
+      case "today":
+        return [...(data?.today?.attending ?? []), ...(data?.today?.interested ?? [])];
+      case "ongoing":
+        return data?.ongoing ?? [];
+      case "upcoming":
+        return [...(data?.upcoming?.attending ?? []), ...(data?.upcoming?.interested ?? [])];
+      case "archived":
+        return data?.archived ?? [];
+      default:
+        return [];
+    }
+  }, [activeTab, data]);
+
+  const totalPages = Math.ceil(tabList.length / PAGE_SIZE);
+  const paginatedList = tabList.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
   // safe open
   const openEvent = useCallback(
     (id: number) => {
@@ -337,8 +299,9 @@ export default function UserDashboardPage() {
 
   // UI quick refresh
   const onRefresh = async () => {
-    setLoading(true);
-    await fetchFresh(true);
+    try {
+      await mutate();
+    } catch {}
   };
 
   return (
@@ -441,108 +404,52 @@ export default function UserDashboardPage() {
             {/* Error */}
             {!loading && error && (
               <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-                {error}
+                {error.message || "Failed to load dashboard"}
               </div>
             )}
 
             {/* Tab panes */}
             {!loading && !error && (
               <>
-                {activeTab === "today" && (
+                {tabList.length === 0 ? (
+                  <EmptyState
+                    title={`No ${activeTab} events`}
+                    subtitle={`You have no events in the ${activeTab} section.`}
+                  />
+                ) : (
                   <>
-                    {(data?.today?.attending?.length ?? 0) === 0 &&
-                    (data?.today?.interested?.length ?? 0) === 0 ? (
-                      <EmptyState
-                        title="Nothing for today"
-                        subtitle="You have no attending or interested events for today."
-                      />
-                    ) : (
-                      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                        {data?.today?.attending?.map((e) => (
-                          <EventCard
-                            key={`t-att-${e.id}`}
-                            event={e}
-                            onOpen={openEvent}
-                          />
-                        ))}
-                        {data?.today?.interested?.map((e) => (
-                          <EventCard
-                            key={`t-int-${e.id}`}
-                            event={e}
-                            onOpen={openEvent}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {activeTab === "ongoing" && (
-                  <>
-                    {(data?.ongoing?.length ?? 0) === 0 ? (
-                      <EmptyState
-                        title="No ongoing events"
-                        subtitle="Nothing is currently running."
-                      />
-                    ) : (
-                      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                        {data?.ongoing?.map((e) => (
-                          <EventCard
-                            key={`og-${e.id}`}
-                            event={e}
-                            onOpen={openEvent}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {activeTab === "upcoming" && (
-                  <>
-                    {(data?.upcoming?.attending?.length ?? 0) === 0 &&
-                    (data?.upcoming?.interested?.length ?? 0) === 0 ? (
-                      <EmptyState
-                        title="No upcoming events"
-                        subtitle="You're not attending or interested in upcoming events."
-                      />
-                    ) : (
-                      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                        {data?.upcoming?.attending?.map((e) => (
-                          <EventCard
-                            key={`u-att-${e.id}`}
-                            event={e}
-                            onOpen={openEvent}
-                          />
-                        ))}
-                        {data?.upcoming?.interested?.map((e) => (
-                          <EventCard
-                            key={`u-int-${e.id}`}
-                            event={e}
-                            onOpen={openEvent}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {activeTab === "archived" && (
-                  <>
-                    {(data?.archived?.length ?? 0) === 0 ? (
-                      <EmptyState
-                        title="No archived events"
-                        subtitle="Past events will show here."
-                      />
-                    ) : (
-                      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                        {data?.archived?.map((e) => (
-                          <EventCard
-                            key={`a-${e.id}`}
-                            event={e}
-                            onOpen={openEvent}
-                          />
-                        ))}
+                    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                      {paginatedList.map((e) => (
+                        <EventCard key={e.id} event={e} onOpen={openEvent} />
+                      ))}
+                    </div>
+                    {totalPages > 1 && (
+                      <div className="flex justify-center items-center gap-4 mt-6">
+                        <button
+                          onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                          disabled={currentPage === 1}
+                          className={`px-4 py-2 rounded-md text-sm ${
+                            currentPage === 1
+                              ? "bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400 cursor-not-allowed"
+                              : "bg-indigo-600 text-white hover:bg-indigo-700"
+                          }`}
+                        >
+                          Previous
+                        </button>
+                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                          Page {currentPage} of {totalPages}
+                        </span>
+                        <button
+                          onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                          disabled={currentPage === totalPages}
+                          className={`px-4 py-2 rounded-md text-sm ${
+                            currentPage === totalPages
+                              ? "bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400 cursor-not-allowed"
+                              : "bg-indigo-600 text-white hover:bg-indigo-700"
+                          }`}
+                        >
+                          Next
+                        </button>
                       </div>
                     )}
                   </>

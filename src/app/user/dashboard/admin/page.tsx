@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "react-hot-toast";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
 import relativeTime from "dayjs/plugin/relativeTime";
 import { useSafeApiFetch } from "@/lib/apiWrapper";
+import useSWR from "swr";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import {
   BarChart as BarChartIcon,
@@ -123,8 +124,6 @@ interface AdminDashboardResponse {
 }
 
 // --- Config ---
-const LS_KEY = "eventpilot_admin_dashboard_v1";
-const REVALIDATE_MS = 5 * 60 * 1000; // treat cache fresh for 5 minutes
 const POLL_MS = 2 * 60 * 1000; // background refresh every 2 minutes
 
 // color palette (works in light & dark)
@@ -158,29 +157,6 @@ const monthNameToIndex: Record<string, number> = {
 function getIsDark() {
   if (typeof document === "undefined") return false;
   return document.documentElement.classList.contains("dark");
-}
-
-function safeLocalStorageGet<T>(
-  key: string
-): { data: T; timestamp: number } | null {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
-
-function safeLocalStorageSet<T>(
-  key: string,
-  value: { data: T; timestamp: number }
-) {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // ignore quota errors
-  }
 }
 
 // Build last 12 months time-series combining users/events/attendees
@@ -267,15 +243,12 @@ function tooltipFormatter(value: string | number) {
 export default function AdminDashboardPage() {
   const safeApiFetch = useSafeApiFetch();
 
-  const [data, setData] = useState<AdminDashboardResponse | null>(null);
-  const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [chartMode, setChartMode] = useState<"bar" | "line">("bar");
   const [metric, setMetric] = useState<"events" | "users" | "attendees">(
     "events"
   );
   const [timeframe, setTimeframe] = useState<"12m" | "5y">("12m");
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [isDark, setIsDark] = useState(getIsDark());
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
 
@@ -289,63 +262,30 @@ export default function AdminDashboardPage() {
     return () => observer.disconnect();
   }, []);
 
-  const readFromCache = useCallback(() => {
-    const cached = safeLocalStorageGet<AdminDashboardResponse>(LS_KEY);
-    if (cached) {
-      setData(cached.data);
-      setLastUpdated(cached.timestamp);
-      setLoading(false);
-      return cached;
-    }
-    return null;
-  }, []);
-
-  const writeToCache = useCallback((next: AdminDashboardResponse) => {
-    const payload = { data: next, timestamp: Date.now() };
-    safeLocalStorageSet(LS_KEY, payload);
-    setData(next);
-    setLastUpdated(payload.timestamp);
-  }, []);
-
-  const fetchFresh = useCallback(
-    async (showToast = false) => {
-      try {
-        const res = await safeApiFetch<AdminDashboardResponse>(
-          "/api/dashboard/admin"
-        );
-        if (res) {
-          writeToCache(res);
-          if (showToast) toast.success("Dashboard refreshed");
-        }
-      } catch {
-      } finally {
-        setLoading(false);
-      }
+  const fetcher = useCallback(
+    async (url: string): Promise<AdminDashboardResponse> => {
+      const res = await safeApiFetch<AdminDashboardResponse | null>(url);
+      if (!res) throw new Error("Failed to fetch Admin Dashboard data");
+      return res;
     },
-    [safeApiFetch, writeToCache]
+    [safeApiFetch]
   );
 
-  // initial load: show cache immediately, then revalidate if stale
-  useEffect(() => {
-    const cached = readFromCache();
-    const isStale = !cached || Date.now() - cached.timestamp > REVALIDATE_MS;
-    if (isStale) {
-      fetchFresh(false);
-    } else {
-      setLoading(false);
-    }
-  }, [fetchFresh, readFromCache]);
+  const {
+    data,
+    error,
+    isLoading: loading,
+    mutate,
+  } = useSWR<AdminDashboardResponse>("/api/dashboard/admin", fetcher, {
+    refreshInterval: POLL_MS,
+    onSuccess: () => setLastUpdated(Date.now()),
+  });
 
-  // background polling
   useEffect(() => {
-    if (pollRef.current) clearInterval(pollRef.current);
-    pollRef.current = setInterval(() => {
-      fetchFresh(false);
-    }, POLL_MS);
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-  }, [fetchFresh]);
+    if (error) {
+      toast.error(error.message || "Failed to load dashboard");
+    }
+  }, [error]);
 
   // derived chart data
   const last12m = useMemo(
@@ -392,6 +332,13 @@ export default function AdminDashboardPage() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  const handleRefresh = async () => {
+    try {
+      await mutate();
+      toast.success("Dashboard refreshed");
+    } catch {}
+  };
+
   return (
     <div className="max-w-7xl mx-auto p-6 space-y-6">
       {/* Header */}
@@ -405,11 +352,7 @@ export default function AdminDashboardPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            onClick={() => fetchFresh(true)}
-            className="gap-2"
-          >
+          <Button variant="outline" onClick={handleRefresh} className="gap-2">
             <RefreshCw className="h-4 w-4" /> Refresh
           </Button>
           {lastUpdated && (

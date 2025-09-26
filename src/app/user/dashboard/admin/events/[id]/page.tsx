@@ -1,24 +1,25 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { toast } from "react-hot-toast";
-import { Pencil, Trash2, Calendar, MapPin, Users } from "lucide-react";
-import { useSafeApiFetch } from "@/lib/apiWrapper";
-import EventModal from "@/components/EventModal";
-import ConfirmModal from "@/components/ConfirmModal";
+import { useCallback, useMemo, useState, useEffect } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
+import useSWR from "swr";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
+import { toast } from "react-hot-toast";
+import { Pencil, Trash2, Calendar, MapPin, Users } from "lucide-react";
+
+import { useSafeApiFetch } from "@/lib/apiWrapper";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import EventModal from "@/components/EventModal";
+import ConfirmModal from "@/components/ConfirmModal";
 import ScheduleModal from "@/components/ScheduleModal";
 import ScheduleTimeline from "@/components/ScheduleTimeline";
 import { Event } from "@/types/events";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
-
 
 interface ScheduleInput {
   start_datetime?: string | null;
@@ -27,7 +28,6 @@ interface ScheduleInput {
   agenda?: string;
 }
 
-// Unified AdminEventForm type
 export interface AdminEventForm {
   id?: number | null;
   title: string;
@@ -45,42 +45,41 @@ export interface AdminEventForm {
   allow_waitlist: boolean;
 }
 
-// -------------------- Component --------------------
-export default function EventDetailPage() {
+export default function AdminEventDetailPage() {
   const { id } = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const safeApiFetch = useSafeApiFetch();
-
-  const [event, setEvent] = useState<Event | null>(null);
-  const [loading, setLoading] = useState(true);
 
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
 
-  // -------------------- Fetch Event --------------------
-  const fetchEvent = useCallback(async () => {
-    setLoading(true);
-    const data = await safeApiFetch<Event>(`/api/events/${id}/`);
-    if (data) setEvent(data);
-    else router.push("/user/dashboard/admin/events");
-    setLoading(false);
-  }, [id, router, safeApiFetch]);
+  // SWR key
+  const swrKey = useMemo(() => (id ? `/api/events/${id}/` : null), [id]);
 
+  // SWR fetcher
+  const fetcher = useCallback(
+    (url: string) => safeApiFetch<Event>(url),
+    [safeApiFetch]
+  );
+
+  // SWR hook
+  const {
+    data: event,
+    error,
+    isLoading,
+    mutate,
+  } = useSWR<Event | null>(swrKey, fetcher);
+
+  // Error toast
   useEffect(() => {
-    fetchEvent();
-  }, [fetchEvent]);
-
-  const memoizedInitialData = useMemo(() => {
-    if (!event) return {};
-    return {
-      ...event,
-      image: null,
-      existingImage: event.image || null,
-      category_id: event.category?.id || null,
-    };
-  }, [event]);
+    if (error instanceof Error) {
+      toast.error(error.message);
+      router.push("/user/dashboard/admin/events");
+    }
+  }, [error, router]);
 
   // -------------------- Update Event --------------------
   const handleUpdate = async (form: AdminEventForm) => {
@@ -103,30 +102,37 @@ export default function EventDetailPage() {
     formData.append("capacity", String(form.capacity ?? 0));
     formData.append("allow_waitlist", String(form.allow_waitlist));
 
-    const result = await safeApiFetch(`/api/events/${event.id}/`, {
-      method: "PUT",
-      body: formData,
-    });
+    try {
+      const updated = await safeApiFetch<Event>(`/api/events/${event.id}/`, {
+        method: "PUT",
+        body: formData,
+      });
 
-    if (result) {
-      toast.success("Event updated successfully!");
-      setShowEditModal(false);
-      fetchEvent();
-    } else {
+      if (updated) {
+        await mutate(updated, false); // update cache without refetch
+        toast.success("Event updated successfully!");
+        setShowEditModal(false);
+      }
+    } catch {
       toast.error("Failed to update event.");
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitting(false);
   };
 
   // -------------------- Delete Event --------------------
   const handleDelete = async () => {
     if (!event) return;
-    const result = await safeApiFetch(`/api/events/${event.id}/`, {
-      method: "DELETE",
-    });
-    if (result !== null) {
-      toast.success("Event deleted successfully!");
-      router.push("/user/dashboard/admin/events");
+    try {
+      const result = await safeApiFetch(`/api/events/${event.id}/`, {
+        method: "DELETE",
+      });
+      if (result !== null) {
+        toast.success("Event deleted successfully!");
+        router.push("/user/dashboard/admin/events");
+      }
+    } catch {
+      toast.error("Failed to delete event.");
     }
   };
 
@@ -154,22 +160,52 @@ export default function EventDetailPage() {
       return;
     }
 
-    const result = await safeApiFetch(
-      `/api/events/${event.id}/schedules/bulk/`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ schedules: payload }),
-      }
-    );
+    try {
+      const result = await safeApiFetch(
+        `/api/events/${event.id}/schedules/bulk/`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ schedules: payload }),
+        }
+      );
 
-    if (result) toast.success("Schedules created successfully!");
-    else toast.error("Failed to create schedules.");
+      if (result) {
+        toast.success("Schedules created successfully!");
+        await mutate(); // revalidate event details
+      }
+    } catch {
+      toast.error("Failed to create schedules.");
+    }
   };
 
-  if (loading || !event) return <LoadingSpinner />;
+  // Back to list handler
+  const handleBack = () => {
+    if (document.referrer.includes("/admin/events")) {
+      router.back();
+    } else {
+      const fromQs = searchParams.get("from");
+      const lastListUrl = fromQs
+        ? `/user/dashboard/admin/events?${decodeURIComponent(fromQs)}`
+        : sessionStorage.getItem("admin_events_last_list_url") ||
+          "/user/dashboard/admin/events";
+      router.push(lastListUrl);
+    }
+  };
 
-  // -------------------- JSX --------------------
+  const memoizedInitialData = useMemo(() => {
+    if (!event) return null;
+    return {
+      ...event,
+      image: null,
+      existingImage: event.image || undefined,  
+      category_id: event.category?.id || null,
+    };
+  }, [event]);
+
+  if (isLoading) return <LoadingSpinner />;
+  if (!event) return null;
+
   return (
     <div className="max-w-6xl mx-auto p-4 md:p-6 space-y-6">
       {/* Header */}
@@ -195,11 +231,7 @@ export default function EventDetailPage() {
       <div className="grid md:grid-cols-3 gap-6">
         <div className="relative w-full h-48 md:h-56 rounded-lg overflow-hidden border border-gray-200 dark:border-white/10 shadow">
           <Image
-            src={
-              event.image && event.image.trim()
-                ? event.image
-                : "/placeholder.jpeg"
-            }
+            src={event.image?.trim() ? event.image : "/placeholder.jpeg"}
             alt={event.title}
             fill
             className="object-cover"
@@ -229,14 +261,12 @@ export default function EventDetailPage() {
                 {dayjs(event.end_time).format("MMM D, YYYY h:mm A")}
               </span>
             </div>
-
             <div className="flex items-start gap-2">
               <MapPin className="text-indigo-500" size={18} />
               <span>
-                {event.venue}
+                {event.venue}{" "}
                 {event.location_map_url && (
                   <>
-                    {" "}
                     -{" "}
                     <a
                       href={event.location_map_url}
@@ -249,7 +279,6 @@ export default function EventDetailPage() {
                 )}
               </span>
             </div>
-
             <div className="flex items-start gap-2">
               <Users className="text-indigo-500" size={18} />
               <span>
@@ -264,7 +293,6 @@ export default function EventDetailPage() {
                 </span>
               </span>
             </div>
-
             <div className="flex items-start gap-2">
               <Users className="text-green-500" size={18} />
               <span>
@@ -272,7 +300,6 @@ export default function EventDetailPage() {
                 <span className="font-medium">{event.attending_count}</span>
               </span>
             </div>
-
             <div className="flex items-start gap-2">
               <Users className="text-yellow-500" size={18} />
               <span>
@@ -280,7 +307,6 @@ export default function EventDetailPage() {
                 <span className="font-medium">{event.interested_count}</span>
               </span>
             </div>
-
             <div className="flex items-start gap-2">
               <span className="font-medium">Organizer:</span>{" "}
               {event.organizer_name}
@@ -335,7 +361,7 @@ export default function EventDetailPage() {
         isOpen={showEditModal}
         onClose={() => setShowEditModal(false)}
         onSubmit={handleUpdate}
-        initialData={memoizedInitialData}
+        initialData={memoizedInitialData || undefined}
         loading={submitting}
       />
 
@@ -347,6 +373,16 @@ export default function EventDetailPage() {
         onConfirm={handleDelete}
         confirmText="Delete"
       />
+
+      {/* Back Button */}
+      <div className="pt-4">
+        <button
+          onClick={handleBack}
+          className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+        >
+          Back to Events
+        </button>
+      </div>
     </div>
   );
 }

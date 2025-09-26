@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
+import useSWR from "swr";
 import { toast } from "react-hot-toast";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Trash2, ArrowLeft } from "lucide-react";
 import { useSafeApiFetch } from "@/lib/apiWrapper";
 import ConfirmModal from "@/components/ConfirmModal";
 import CategoryModal from "@/components/CategoryModal";
@@ -19,24 +20,25 @@ export default function OrganizerCategoryDetailPage() {
   const router = useRouter();
   const safeApiFetch = useSafeApiFetch();
 
-  const [category, setCategory] = useState<Category | null>(null);
-  const [loading, setLoading] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
-  const fetchCategory = useCallback(async () => {
-    setLoading(true);
-    const data = await safeApiFetch<Category>(`/api/categories/${id}/`);
-    if (data) setCategory(data);
-    else router.push("/user/dashboard/organizer/categories");
-    setLoading(false);
-  }, [id, router, safeApiFetch]);
+  // SWR fetcher
+  const fetcher = useCallback(
+    (url: string) => safeApiFetch<Category>(url),
+    [safeApiFetch]
+  );
 
-  useEffect(() => {
-    fetchCategory();
-  }, [fetchCategory]);
+  // SWR hook
+  const { data: category, error, isLoading, mutate } = useSWR(
+    id ? `/api/categories/${id}/` : null,
+    fetcher,
+    { revalidateOnFocus: false }
+  );
 
+  // Handle update
   const handleUpdate = async (form: {
     id?: number | null;
     name: string;
@@ -45,35 +47,70 @@ export default function OrganizerCategoryDetailPage() {
     if (!category) return;
     setSubmitting(true);
 
-    const result = await safeApiFetch(`/api/categories/${category.id}/`, {
-      method: "PUT",
-      body: JSON.stringify({ name: form.name, description: form.description }),
-    });
+    try {
+      const result = await safeApiFetch(`/api/categories/${category.id}/`, {
+        method: "PUT",
+        body: JSON.stringify({
+          name: form.name,
+          description: form.description,
+        }),
+      });
 
-    if (result) {
-      toast.success("Category updated successfully!");
-      setShowEditModal(false);
-      fetchCategory();
+      if (result) {
+        toast.success("Category updated successfully!");
+        setShowEditModal(false);
+        mutate(); // refresh category
+      } else {
+        toast.error("Failed to update category.");
+      }
+    } catch {
+      toast.error("An error occurred while updating.");
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitting(false);
   };
 
+  // Handle delete
   const handleDelete = async () => {
     if (!category) return;
-    const result = await safeApiFetch(`/api/categories/${category.id}/`, {
-      method: "DELETE",
-    });
-    if (result !== null) {
-      toast.success("Category deleted successfully!");
-      router.push("/user/dashboard/organizer/categories");
+    setDeleteLoading(true);
+
+    try {
+      const result = await safeApiFetch(`/api/categories/${category.id}/`, {
+        method: "DELETE",
+      });
+
+      if (result !== null) {
+        toast.success("Category deleted successfully!");
+        router.push("/user/dashboard/organizer/categories");
+      } else {
+        toast.error("Failed to delete category.");
+      }
+    } catch {
+      toast.error("An error occurred while deleting.");
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
-  if (loading || !category)
-    return <p className="p-6 text-gray-500">Loading...</p>;
+  if (isLoading) return <p className="p-6 text-gray-500">Loading...</p>;
+  if (error || !category) {
+    toast.error("Failed to fetch category.");
+    router.push("/user/dashboard/organizer/categories");
+    return null;
+  }
 
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
+      {/* Back button */}
+      <button
+        onClick={() => router.push("/user/dashboard/organizer/categories")}
+        className="flex items-center gap-2 text-sm text-gray-600 hover:text-indigo-600 dark:text-gray-300 dark:hover:text-indigo-400 mb-4"
+      >
+        <ArrowLeft size={16} /> Back to Categories
+      </button>
+
+      {/* Header */}
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-semibold">{category.name}</h1>
         <div className="flex gap-2">
@@ -92,6 +129,7 @@ export default function OrganizerCategoryDetailPage() {
         </div>
       </div>
 
+      {/* Description */}
       <div className="bg-white dark:bg-gray-900 border border-indigo-500 p-6 rounded-lg shadow">
         <h2 className="text-lg font-medium mb-2">Description</h2>
         <p className="text-gray-700 dark:text-gray-300 whitespace-pre-line">
@@ -116,6 +154,7 @@ export default function OrganizerCategoryDetailPage() {
         onCancel={() => setShowDeleteConfirm(false)}
         onConfirm={handleDelete}
         confirmText="Delete"
+        loading={deleteLoading}
       />
     </div>
   );
