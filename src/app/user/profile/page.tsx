@@ -141,7 +141,7 @@ export default function ProfilePage() {
       <div className="max-w-3xl mx-auto bg-white dark:bg-gray-900 shadow-xl rounded-xl p-8">
         {/* Image Section */}
         <div className="flex flex-col md:flex-row items-center gap-6">
-          <div className="relative w-28 h-28">
+          <div className="relative w-36 h-36">
             {profile?.profile_image ? (
               <Image
                 src={profile.profile_image}
@@ -252,19 +252,19 @@ export default function ProfilePage() {
             <div className="flex flex-col sm:flex-row justify-end gap-4 mt-6">
               <Link
                 href="/auth/change-password"
-                className="px-4 py-2 text-sm text-indigo-600 border border-indigo-600 rounded hover:bg-indigo-600 hover:text-white"
+                className="px-4 py-2 text-sm text-indigo-600 border border-indigo-600 rounded hover:bg-indigo-600 hover:text-white flex items-center justify-center"
               >
                 Change Password
               </Link>
               <button
                 onClick={handlePasswordReset}
-                className="px-4 py-2 text-sm text-indigo-600 border border-indigo-600 rounded hover:bg-indigo-600 hover:text-white"
+                className="px-4 py-2 text-sm text-indigo-600 border border-indigo-600 rounded hover:bg-indigo-600 hover:text-white flex items-center justify-center"
               >
                 Reset Password
               </button>
               <button
                 onClick={() => setEditMode(true)}
-                className="px-4 py-2 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700 flex items-center gap-1"
+                className="px-4 py-2 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700 flex items-center justify-center gap-1"
               >
                 <Pencil size={16} /> Edit Profile
               </button>
