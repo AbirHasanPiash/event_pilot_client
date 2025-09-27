@@ -348,93 +348,100 @@ export default function OrganizerEventsPage() {
         <p className="text-gray-500">No events found.</p>
       ) : (
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {events.map((event) => (
-            <div
-              key={event.id}
-              className="border rounded-lg overflow-hidden shadow-sm bg-white dark:bg-gray-900 border-gray-200 dark:border-white/10 flex flex-col"
-            >
-              {/* Image */}
+          {events.map((event) => {
+            const isEventStarted = dayjs().isAfter(dayjs(event.start_time));
+            return (
               <div
-                className="relative w-full h-40 cursor-pointer"
-                onClick={() =>
-                  router.push(`/user/dashboard/organizer/events/${event.id}`)
-                }
+                key={event.id}
+                className="border rounded-lg overflow-hidden shadow-sm bg-white dark:bg-gray-900 border-gray-200 dark:border-white/10 flex flex-col"
               >
-                <Image
-                  src={event.image ? event.image : "/placeholder.jpeg"}
-                  alt={event.title}
-                  fill
-                  className="object-cover"
-                />
-              </div>
-
-              {/* Content */}
-              <div className="p-4 flex flex-col flex-grow">
-                <h3
-                  className="text-lg font-semibold hover:text-indigo-600 cursor-pointer"
+                {/* Image */}
+                <div
+                  className="relative w-full h-40 cursor-pointer"
                   onClick={() =>
                     router.push(`/user/dashboard/organizer/events/${event.id}`)
                   }
                 >
-                  {event.title}
-                </h3>
-
-                <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2">
-                  {event.description}
-                </p>
-
-                <div className="mt-2 text-xs text-gray-400">
-                  <p>
-                    <strong>When:</strong>{" "}
-                    {dayjs(event.start_time).format("MMM D, YYYY h:mm A")}
-                  </p>
-                  {event.category?.name && (
-                    <p>
-                      <strong>Category:</strong> {event.category.name}
-                    </p>
-                  )}
+                  <Image
+                    src={event.image ? event.image : "/placeholder.jpeg"}
+                    alt={event.title}
+                    fill
+                    className="object-cover"
+                  />
                 </div>
 
-                {/* Tags */}
-                {event.tags.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {event.tags.map((tag) => (
-                      <span
-                        key={tag}
-                        className="px-2 py-0.5 bg-indigo-50 text-indigo-600 text-xs rounded"
-                      >
-                        #{tag}
-                      </span>
-                    ))}
-                  </div>
-                )}
+                {/* Content */}
+                <div className="p-4 flex flex-col flex-grow">
+                  <h3
+                    className="text-lg font-semibold hover:text-indigo-600 cursor-pointer"
+                    onClick={() =>
+                      router.push(`/user/dashboard/organizer/events/${event.id}`)
+                    }
+                  >
+                    {event.title}
+                  </h3>
 
-                {/* Actions */}
-                <div className="mt-auto pt-3 flex gap-2">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEditingEvent(event);
-                      setShowFormModal(true);
-                    }}
-                    className="flex items-center gap-1 px-2 py-1 text-xs border border-indigo-500 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-white/10 rounded"
-                  >
-                    <Pencil size={14} /> Edit
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEventToDelete(event.id);
-                      setShowDeleteConfirm(true);
-                    }}
-                    className="flex items-center gap-1 px-2 py-1 text-xs border border-red-500 text-red-600 hover:bg-red-50 dark:hover:bg-white/10 rounded"
-                  >
-                    <Trash2 size={14} /> Delete
-                  </button>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-2">
+                    {event.description}
+                  </p>
+
+                  <div className="mt-2 text-xs text-gray-400">
+                    <p>
+                      <strong>When:</strong>{" "}
+                      {event.start_time
+                        ? dayjs(event.start_time).format("MMM D, YYYY h:mm A")
+                        : "—"}
+                    </p>
+                    {event.category?.name && (
+                      <p>
+                        <strong>Category:</strong> {event.category.name}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Tags */}
+                  {event.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {event.tags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="px-2 py-0.5 bg-indigo-50 text-indigo-600 text-xs rounded"
+                        >
+                          #{tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Actions */}
+                  <div className="mt-auto pt-3 flex gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingEvent(event);
+                        setShowFormModal(true);
+                      }}
+                      disabled={isEventStarted}
+                      className="flex items-center gap-1 px-2 py-1 text-xs border border-indigo-500 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-white/10 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Pencil size={14} /> Edit
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEventToDelete(event.id);
+                        setShowDeleteConfirm(true);
+                      }}
+                      disabled={isEventStarted}
+                      className="flex items-center gap-1 px-2 py-1 text-xs border border-red-500 text-red-600 hover:bg-red-50 dark:hover:bg-white/10 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Trash2 size={14} /> Delete
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

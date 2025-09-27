@@ -55,6 +55,7 @@ export default function EventDetailsPage() {
   const router = useRouter();
   const safeApiFetch = useSafeApiFetch();
   const searchParams = useSearchParams();
+  const isEventStarted = false;
 
   const [isReacting, setIsReacting] = useState<"attending" | "interested" | null>(null);
 
@@ -240,7 +241,7 @@ export default function EventDetailsPage() {
           )}
 
           {/* Schedule Timeline */}
-          <ScheduleTimeline />
+          <ScheduleTimeline canEdit={!isEventStarted} />
         </div>
 
         {/* Sidebar */}

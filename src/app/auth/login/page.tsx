@@ -4,10 +4,18 @@ import { useForm } from "react-hook-form";
 import { useAuth } from "@/context/AuthContext";
 import Link from "next/link";
 import toast from "react-hot-toast";
+import { useState } from "react";
 
 type LoginForm = {
   email: string;
   password: string;
+};
+
+
+const quickLoginCredentials = {
+  admin: { email: "admin@gmail.com", password: "piash2025" },
+  organizer: { email: "jetela6471@artvara.com", password: "SteLukeHDi&^@#84dh" },
+  attendee: { email: "bimimor299@artvara.com", password: "NotorHs*34dfhlHds*237*DShs" },
 };
 
 export default function LoginPage() {
@@ -18,6 +26,8 @@ export default function LoginPage() {
   } = useForm<LoginForm>();
 
   const { login } = useAuth();
+  const [showModal, setShowModal] = useState(false);
+  const [loadingRole, setLoadingRole] = useState<string | null>(null);
 
   const onSubmit = async (data: LoginForm) => {
     try {
@@ -28,6 +38,20 @@ export default function LoginPage() {
       } else {
         toast.error("Login failed. Please check your credentials.");
       }
+    }
+  };
+
+  const handleQuickLogin = async (role: keyof typeof quickLoginCredentials) => {
+    const creds = quickLoginCredentials[role];
+    setLoadingRole(role);
+    try {
+      await login(creds.email, creds.password);
+      setShowModal(false);
+      toast.success(`Logged in as ${role}`);
+    } catch {
+      toast.error("Quick login failed. Please try again.");
+    } finally {
+      setLoadingRole(null);
     }
   };
 
@@ -75,7 +99,16 @@ export default function LoginPage() {
             {isSubmitting ? "Signing in..." : "Login"}
           </button>
 
-          <div className="mt-4 flex justify-between items-center text-sm text-gray-600">
+          {/* Explore Deeply button */}
+          <button
+            type="button"
+            onClick={() => setShowModal(true)}
+            className="w-full py-2 px-4 text-green-600 border border-green-600 bg-green-50 hover:bg-green-100 rounded font-semibold transition mt-2"
+          >
+            Explore EventPilot Deeply
+          </button>
+
+          <div className="mt-4 flex justify-between items-center text-sm text-gray-600 dark:text-gray-400">
             <p className="text-left">
               Don&apos;t have an account?{" "}
               <Link
@@ -94,6 +127,39 @@ export default function LoginPage() {
           </div>
         </form>
       </div>
+
+      {/* Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center px-4 z-50">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg max-w-sm w-full p-6 space-y-4">
+            <h3 className="text-lg font-semibold text-center text-indigo-600">
+              Quick Login as
+            </h3>
+            <div className="space-y-3">
+              {(Object.keys(quickLoginCredentials) as Array<
+                keyof typeof quickLoginCredentials
+              >).map((role) => (
+                <button
+                  key={role}
+                  onClick={() => handleQuickLogin(role)}
+                  disabled={loadingRole !== null}
+                  className="w-full py-2 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold transition disabled:opacity-50"
+                >
+                  {loadingRole === role
+                    ? "Logging in..."
+                    : `Login as ${role.charAt(0).toUpperCase() + role.slice(1)}`}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setShowModal(false)}
+              className="w-full py-2 px-4 border border-gray-400 dark:border-gray-600 rounded-lg font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition mt-2"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

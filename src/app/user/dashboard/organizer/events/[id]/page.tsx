@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState, useEffect } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
-import useSWR from "swr";
+import useSWR, { mutate } from "swr";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
@@ -16,17 +16,10 @@ import EventModal from "@/components/EventModal";
 import ConfirmModal from "@/components/ConfirmModal";
 import ScheduleModal from "@/components/ScheduleModal";
 import ScheduleTimeline from "@/components/ScheduleTimeline";
-import { Event, EventFormData } from "@/types/events";
+import { Event, EventFormData, Schedule, ScheduleInput } from "@/types/events";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
-
-interface ScheduleInput {
-  start_datetime?: string | null;
-  end_datetime?: string | null;
-  title?: string;
-  agenda?: string;
-}
 
 export default function OrganizerEventDetailPage() {
   const { id } = useParams();
@@ -53,7 +46,7 @@ export default function OrganizerEventDetailPage() {
     data: event,
     error,
     isLoading,
-    mutate,
+    mutate: mutateEvent,
   } = useSWR<Event | null>(swrKey, fetcher);
 
   // Error toast
@@ -64,6 +57,11 @@ export default function OrganizerEventDetailPage() {
     }
   }, [error, router]);
 
+  const isEventStarted = useMemo(() => {
+    if (!event?.start_time) return false;
+    return dayjs().isAfter(dayjs(event.start_time));
+  }, [event]);
+
   // -------------------- Update Event --------------------
   const handleUpdate = async (form: EventFormData) => {
     if (!event) return;
@@ -72,7 +70,8 @@ export default function OrganizerEventDetailPage() {
     const formData = new FormData();
     formData.append("title", form.title);
     formData.append("description", form.description);
-    if (form.category?.id) formData.append("category_id", String(form.category.id));
+    if (form.category?.id)
+      formData.append("category_id", String(form.category.id));
     formData.append("tags", JSON.stringify(form.tags));
     if (form.image instanceof File) formData.append("image", form.image);
     if (form.start_time) formData.append("start_time", form.start_time);
@@ -91,7 +90,7 @@ export default function OrganizerEventDetailPage() {
       });
 
       if (updated) {
-        await mutate(updated, false);
+        await mutateEvent(updated, false);
         toast.success("Event updated successfully!");
         setShowEditModal(false);
       }
@@ -119,36 +118,69 @@ export default function OrganizerEventDetailPage() {
   };
 
   // -------------------- Add Schedules --------------------
-  const handleScheduleSubmit = async (schedules: ScheduleInput[]) => {
+  const handleScheduleSubmit = async (schedulesInput: ScheduleInput[]) => {
     if (!event) return;
 
-    const payload = schedules
+    const payload = schedulesInput
       .map((s) => ({
-        start_datetime: s.start_datetime ? new Date(s.start_datetime).toISOString() : null,
-        end_datetime: s.end_datetime ? new Date(s.end_datetime).toISOString() : null,
+        start_datetime: s.start_datetime
+          ? new Date(s.start_datetime).toISOString()
+          : null,
+        end_datetime: s.end_datetime
+          ? new Date(s.end_datetime).toISOString()
+          : null,
         title: s.title?.trim() || "",
         agenda: s.agenda?.trim() || "",
       }))
       .filter((s) => s.start_datetime && s.title);
 
     if (payload.length === 0) {
-      toast.error("Please add at least one valid schedule with title and start time.");
+      toast.error(
+        "Please add at least one valid schedule with title and start time."
+      );
       return;
     }
 
+    const cacheKey = `/api/events/${event.id}/schedules/`;
+
+    // Optimistic update
+    mutate(
+      cacheKey,
+      (current: Schedule[] = []) => {
+        const tempSchedules: Schedule[] = payload.map((p, idx) => ({
+          ...p,
+          id: Date.now() + idx,
+          event: Number(event.id),
+          start_datetime: p.start_datetime as string,
+          end_datetime: p.end_datetime as string | null, // if your Schedule allows null
+        }));
+        return [...current, ...tempSchedules].sort(
+          (a, b) =>
+            new Date(a.start_datetime).getTime() -
+            new Date(b.start_datetime).getTime()
+        );
+      },
+      false
+    );
+
     try {
-      const result = await safeApiFetch(`/api/events/${event.id}/schedules/bulk/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ schedules: payload }),
-      });
+      const result = await safeApiFetch(
+        `/api/events/${event.id}/schedules/bulk/`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ schedules: payload }),
+        }
+      );
 
       if (result) {
         toast.success("Schedules created successfully!");
-        await mutate();
+        mutate(cacheKey); // refresh schedules
+        await mutateEvent();
       }
     } catch {
       toast.error("Failed to create schedules.");
+      mutate(cacheKey); // rollback
     }
   };
 
@@ -188,13 +220,15 @@ export default function OrganizerEventDetailPage() {
         <div className="flex gap-2">
           <button
             onClick={() => setShowEditModal(true)}
-            className="flex items-center gap-1 px-4 py-2 text-sm border border-indigo-500 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-white/10 rounded-lg"
+            disabled={isEventStarted}
+            className="flex items-center gap-1 px-4 py-2 text-sm border border-indigo-500 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-white/10 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Pencil size={16} /> Edit
           </button>
           <button
             onClick={() => setShowDeleteConfirm(true)}
-            className="flex items-center gap-1 px-4 py-2 text-sm border border-red-500 text-red-600 hover:bg-red-50 dark:hover:bg-white/10 rounded-lg"
+            disabled={isEventStarted}
+            className="flex items-center gap-1 px-4 py-2 text-sm border border-red-500 text-red-600 hover:bg-red-50 dark:hover:bg-white/10 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Trash2 size={16} /> Delete
           </button>
@@ -270,7 +304,8 @@ export default function OrganizerEventDetailPage() {
             <div className="flex items-start gap-2">
               <Users className="text-green-500" size={18} />
               <span>
-                Attending: <span className="font-medium">{event.attending_count}</span>
+                Attending:{" "}
+                <span className="font-medium">{event.attending_count}</span>
               </span>
             </div>
             <div className="flex items-start gap-2">
@@ -281,7 +316,8 @@ export default function OrganizerEventDetailPage() {
               </span>
             </div>
             <div className="flex items-start gap-2">
-              <span className="font-medium">Organizer:</span> {event.organizer_name}
+              <span className="font-medium">Organizer:</span>{" "}
+              {event.organizer_name}
             </div>
           </div>
         </div>
@@ -313,13 +349,14 @@ export default function OrganizerEventDetailPage() {
       <div>
         <button
           onClick={() => setShowScheduleModal(true)}
-          className="mt-4 px-4 py-2 text-sm border border-indigo-500 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-white/10 rounded-lg"
+          disabled={isEventStarted}
+          className="mt-4 px-4 py-2 text-sm border border-indigo-500 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-white/10 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
         >
           + Add Sub-Schedules
         </button>
       </div>
 
-      <ScheduleTimeline />
+      <ScheduleTimeline canEdit={!isEventStarted} />
 
       <ScheduleModal
         isOpen={showScheduleModal}

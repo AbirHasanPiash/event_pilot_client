@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState, useEffect } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
-import useSWR from "swr";
+import useSWR, { mutate } from "swr";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
@@ -16,17 +16,10 @@ import EventModal from "@/components/EventModal";
 import ConfirmModal from "@/components/ConfirmModal";
 import ScheduleModal from "@/components/ScheduleModal";
 import ScheduleTimeline from "@/components/ScheduleTimeline";
-import { Event } from "@/types/events";
+import { Event, Schedule, ScheduleInput } from "@/types/events";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
-
-interface ScheduleInput {
-  start_datetime?: string | null;
-  end_datetime?: string | null;
-  title?: string;
-  agenda?: string;
-}
 
 export interface AdminEventForm {
   id?: number | null;
@@ -70,8 +63,14 @@ export default function AdminEventDetailPage() {
     data: event,
     error,
     isLoading,
-    mutate,
+    mutate: mutateEvent,
   } = useSWR<Event | null>(swrKey, fetcher);
+
+  // Compute if event has started
+  const isEventStarted = useMemo(() => {
+    if (!event?.start_time) return false;
+    return !dayjs().isBefore(dayjs(event.start_time));
+  }, [event]);
 
   // Error toast
   useEffect(() => {
@@ -109,7 +108,7 @@ export default function AdminEventDetailPage() {
       });
 
       if (updated) {
-        await mutate(updated, false); // update cache without refetch
+        await mutateEvent(updated, false); // update cache without refetch
         toast.success("Event updated successfully!");
         setShowEditModal(false);
       }
@@ -136,48 +135,69 @@ export default function AdminEventDetailPage() {
     }
   };
 
-  // -------------------- Add Schedules --------------------
-  const handleScheduleSubmit = async (schedules: ScheduleInput[]) => {
-    if (!event) return;
+ // -------------------- Add Schedules --------------------
+const handleScheduleSubmit = async (schedulesInput: ScheduleInput[]) => {
+  if (!event) return;
 
-    const payload = schedules
-      .map((s) => ({
-        start_datetime: s.start_datetime
-          ? new Date(s.start_datetime).toISOString()
-          : null,
-        end_datetime: s.end_datetime
-          ? new Date(s.end_datetime).toISOString()
-          : null,
-        title: s.title?.trim() || "",
-        agenda: s.agenda?.trim() || "",
-      }))
-      .filter((s) => s.start_datetime && s.title);
+  const payload = schedulesInput
+    .map((s) => ({
+      start_datetime: new Date(s.start_datetime).toISOString(),
+      end_datetime: s.end_datetime
+        ? new Date(s.end_datetime).toISOString()
+        : null,
+      title: s.title?.trim() || "",
+      agenda: s.agenda?.trim() || "",
+    }))
+    .filter((s) => s.start_datetime && s.title);
 
-    if (payload.length === 0) {
-      toast.error(
-        "Please add at least one valid schedule with title and start time."
+  if (payload.length === 0) {
+    toast.error(
+      "Please add at least one valid schedule with title and start time."
+    );
+    return;
+  }
+
+  const cacheKey = `/api/events/${event.id}/schedules/`;
+
+  // Optimistic update
+  mutate(
+    cacheKey,
+    (current: Schedule[] = []) => {
+      const tempSchedules: Schedule[] = payload.map((p, idx) => ({
+        ...p,
+        id: Date.now() + idx,
+        event: Number(event.id),
+      }));
+      return [...current, ...tempSchedules].sort(
+        (a, b) =>
+          new Date(a.start_datetime).getTime() -
+          new Date(b.start_datetime).getTime()
       );
-      return;
-    }
+    },
+    false
+  );
 
-    try {
-      const result = await safeApiFetch(
-        `/api/events/${event.id}/schedules/bulk/`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ schedules: payload }),
-        }
-      );
-
-      if (result) {
-        toast.success("Schedules created successfully!");
-        await mutate(); // revalidate event details
+  try {
+    const result = await safeApiFetch(
+      `/api/events/${event.id}/schedules/bulk/`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ schedules: payload }),
       }
-    } catch {
-      toast.error("Failed to create schedules.");
+    );
+
+    if (result) {
+      toast.success("Schedules created successfully!");
+      mutate(cacheKey); // refresh schedules
+      await mutateEvent();
     }
-  };
+  } catch {
+    toast.error("Failed to create schedules.");
+    mutate(cacheKey); // rollback
+  }
+};
+
 
   // Back to list handler
   const handleBack = () => {
@@ -198,7 +218,7 @@ export default function AdminEventDetailPage() {
     return {
       ...event,
       image: null,
-      existingImage: event.image || undefined,  
+      existingImage: event.image || undefined,
       category_id: event.category?.id || null,
     };
   }, [event]);
@@ -214,13 +234,15 @@ export default function AdminEventDetailPage() {
         <div className="flex gap-2">
           <button
             onClick={() => setShowEditModal(true)}
-            className="flex items-center gap-1 px-4 py-2 text-sm border border-indigo-500 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-white/10 rounded-lg"
+            disabled={isEventStarted}
+            className="flex items-center gap-1 px-4 py-2 text-sm border border-indigo-500 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-white/10 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Pencil size={16} /> Edit
           </button>
           <button
             onClick={() => setShowDeleteConfirm(true)}
-            className="flex items-center gap-1 px-4 py-2 text-sm border border-red-500 text-red-600 hover:bg-red-50 dark:hover:bg-white/10 rounded-lg"
+            disabled={isEventStarted}
+            className="flex items-center gap-1 px-4 py-2 text-sm border border-red-500 text-red-600 hover:bg-red-50 dark:hover:bg-white/10 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Trash2 size={16} /> Delete
           </button>
@@ -341,13 +363,14 @@ export default function AdminEventDetailPage() {
       <div>
         <button
           onClick={() => setShowScheduleModal(true)}
-          className="mt-4 px-4 py-2 text-sm border border-indigo-500 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-white/10 rounded-lg"
+          disabled={isEventStarted}
+          className="mt-4 px-4 py-2 text-sm border border-indigo-500 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-white/10 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
         >
           + Add Sub-Schedules
         </button>
       </div>
 
-      <ScheduleTimeline />
+      <ScheduleTimeline canEdit={!isEventStarted} />
 
       <ScheduleModal
         isOpen={showScheduleModal}

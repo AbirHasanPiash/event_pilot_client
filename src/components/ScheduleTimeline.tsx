@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { useParams, usePathname } from "next/navigation";
 import { useSafeApiFetch } from "@/lib/apiWrapper";
 import { Calendar, Clock, Pencil, Trash2 } from "lucide-react";
@@ -12,38 +12,152 @@ import LoadingSpinner from "@/components/LoadingSpinner";
 import ScheduleModal from "@/components/ScheduleModal";
 import ConfirmModal from "@/components/ConfirmModal";
 import { toast } from "react-hot-toast";
+import useSWR, { mutate } from "swr";
+import { Schedule, ScheduleInput } from "@/types/events";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
-interface Schedule {
-  id: number;
-  event: number;
-  title: string;
-  agenda: string;
-  start_datetime: string;
-  end_datetime: string;
+interface ScheduleTimelineProps {
+  canEdit: boolean;
 }
 
-export default function ScheduleTimeline() {
+export default function ScheduleTimeline({ canEdit: propCanEdit }: ScheduleTimelineProps) {
   const { id: eventId } = useParams();
   const safeApiFetch = useSafeApiFetch();
-  const pathname = usePathname();
-  const [schedules, setSchedules] = useState<Schedule[]>([]);
-  const [loading, setLoading] = useState(true);
-  type ScheduleInput = Omit<Schedule, "id" | "event">;
-
 
   // Modal state
   const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
-  const [scheduleToDelete, setScheduleToDelete] = useState<Schedule | null>(
-    null
+  const [scheduleToDelete, setScheduleToDelete] = useState<Schedule | null>(null);
+  const pathname = usePathname();
+
+  // SWR fetcher
+  const fetcher = async (url: string) => {
+    const data = await safeApiFetch<{ results: Schedule[] }>(url);
+    return (
+      data?.results
+        ?.sort(
+          (a, b) =>
+            new Date(a.start_datetime).getTime() -
+            new Date(b.start_datetime).getTime()
+        ) || []
+    );
+  };
+
+  const { data: schedules = [], isLoading } = useSWR<Schedule[]>(
+    eventId ? `/api/events/${eventId}/schedules/` : null,
+    fetcher
   );
 
-  const isAdminPage = pathname.includes("/admin/");
-  const isOrganizerPage = pathname.includes("/organizer/");
-  const canEdit = isAdminPage || isOrganizerPage;
+  // Check if current path is admin/organizer dashboard
+  const isDashboard =
+  pathname?.startsWith("/user/dashboard/admin") ||
+  pathname?.startsWith("/user/dashboard/organizer");
+
+  // Create or update handler with optimistic updates
+  const handleSaveSchedule = async (updates: ScheduleInput[]) => {
+    const update = updates[0];
+    const cacheKey = `/api/events/${eventId}/schedules/`;
+
+    try {
+      if (editingSchedule) {
+        // Optimistic update for edit
+        mutate(
+          cacheKey,
+          (current: Schedule[] | undefined) => {
+            if (!current) return current;
+            return current.map((s) =>
+              s.id === editingSchedule.id ? { ...s, ...update } : s
+            );
+          },
+          false
+        );
+
+        // Update
+        const result = await safeApiFetch(
+          `/api/events/${eventId}/schedules/${editingSchedule.id}/`,
+          {
+            method: "PATCH",
+            body: JSON.stringify(update),
+            headers: { "Content-Type": "application/json" },
+          }
+        );
+        if (result) {
+          toast.success("Schedule updated successfully");
+          setShowScheduleModal(false);
+          setEditingSchedule(null);
+          mutate(cacheKey); // Revalidate to confirm
+        }
+      } else {
+        // Optimistic update for create (use temp ID and insert sorted)
+        const tempId = Date.now();
+        mutate(
+          cacheKey,
+          (current: Schedule[] | undefined) => {
+            const newSchedule = {
+              ...update,
+              id: tempId,
+              event: Number(eventId),
+            };
+            const updatedList = current ? [...current, newSchedule] : [newSchedule];
+            return updatedList.sort(
+              (a, b) =>
+                new Date(a.start_datetime).getTime() -
+                new Date(b.start_datetime).getTime()
+            );
+          },
+          false
+        );
+
+        // Create new
+        const result = await safeApiFetch(`/api/events/${eventId}/schedules/`, {
+          method: "POST",
+          body: JSON.stringify(update),
+          headers: { "Content-Type": "application/json" },
+        });
+        if (result) {
+          toast.success("Schedule created successfully");
+          setShowScheduleModal(false);
+          mutate(cacheKey); // Revalidate to get real ID and confirm
+        }
+      }
+    } catch {
+      toast.error("Something went wrong");
+      mutate(cacheKey); // Rollback by revalidating
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!scheduleToDelete) return;
+    const cacheKey = `/api/events/${eventId}/schedules/`;
+
+    // Optimistic remove
+    mutate(
+      cacheKey,
+      (current: Schedule[] | undefined) => {
+        if (!current) return current;
+        return current.filter((s) => s.id !== scheduleToDelete.id);
+      },
+      false
+    );
+
+    try {
+      const result = await safeApiFetch(
+        `/api/events/${eventId}/schedules/${scheduleToDelete.id}/`,
+        { method: "DELETE" }
+      );
+      if (result !== null) {
+        toast.success("Schedule deleted successfully");
+        mutate(cacheKey); // Revalidate to confirm
+      }
+    } catch {
+      toast.error("Failed to delete schedule");
+      mutate(cacheKey); // Rollback by revalidating
+    } finally {
+      setScheduleToDelete(null);
+    }
+  };
 
   function generatePath(cycles: number) {
     let d = "M 50 0";
@@ -58,80 +172,7 @@ export default function ScheduleTimeline() {
     return d;
   }
 
-  const fetchSchedules = useCallback(async () => {
-    if (!eventId) return;
-    const data = await safeApiFetch<{ results: Schedule[] }>(
-      `/api/events/${eventId}/schedules/`
-    );
-    if (data?.results) {
-      const sorted = [...data.results].sort(
-        (a, b) =>
-          new Date(a.start_datetime).getTime() -
-          new Date(b.start_datetime).getTime()
-      );
-      setSchedules(sorted);
-    }
-    setLoading(false);
-  }, [eventId, safeApiFetch]);
-
-  useEffect(() => {
-    fetchSchedules();
-  }, [fetchSchedules]);
-
-  // Create or update handler
-  const handleSaveSchedule = async (updates: ScheduleInput[]) => {
-    const update = updates[0];
-    if (editingSchedule) {
-      // update
-      const result = await safeApiFetch(
-        `/api/events/${eventId}/schedules/${editingSchedule.id}/`,
-        {
-          method: "PATCH",
-          body: JSON.stringify(update),
-          headers: { "Content-Type": "application/json" },
-        }
-      );
-      if (result) {
-        toast.success("Schedule updated successfully");
-        setShowScheduleModal(false);
-        setEditingSchedule(null);
-        fetchSchedules(); // re-render
-      } else {
-        toast.error("Failed to update schedule");
-      }
-    } else {
-      // create new
-      const result = await safeApiFetch(`/api/events/${eventId}/schedules/`, {
-        method: "POST",
-        body: JSON.stringify(update),
-        headers: { "Content-Type": "application/json" },
-      });
-      if (result) {
-        toast.success("Schedule created successfully");
-        setShowScheduleModal(false);
-        fetchSchedules(); // re-render immediately
-      } else {
-        toast.error("Failed to create schedule");
-      }
-    }
-  };
-
-  const confirmDelete = async () => {
-    if (!scheduleToDelete) return;
-    const result = await safeApiFetch(
-      `/api/events/${eventId}/schedules/${scheduleToDelete.id}/`,
-      { method: "DELETE" }
-    );
-    if (result !== null) {
-      toast.success("Schedule deleted successfully");
-      fetchSchedules();
-    } else {
-      toast.error("Failed to delete schedule");
-    }
-    setScheduleToDelete(null);
-  };
-
-  if (loading) return <LoadingSpinner />;
+  if (isLoading) return <LoadingSpinner />;
 
   if (!schedules.length)
     return (
@@ -140,19 +181,6 @@ export default function ScheduleTimeline() {
         <p className="text-gray-500 dark:text-gray-400">
           No sub-schedules added yet.
         </p>
-
-        {/* Allow creating schedules right away */}
-        {canEdit && (
-          <button
-            onClick={() => {
-              setEditingSchedule(null);
-              setShowScheduleModal(true);
-            }}
-            className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
-          >
-            + Add Schedule
-          </button>
-        )}
       </div>
     );
 
@@ -211,7 +239,6 @@ export default function ScheduleTimeline() {
                 shadow-md transition-all duration-500 ease-out
                 soft-glow bg-white dark:bg-gray-900"
               >
-                {/* Inner card */}
                 <div className="rounded-2xl p-6 border border-indigo-500">
                   <h3 className="text-xl font-bold text-indigo-700 dark:text-indigo-300 mb-2">
                     {s.title}
@@ -241,8 +268,7 @@ export default function ScheduleTimeline() {
                     </span>
                   </div>
 
-                  {/* Actions - only for admins/organizers */}
-                  {canEdit && (
+                  {propCanEdit && isDashboard && (
                     <div className="mt-auto pt-3 flex gap-2">
                       <button
                         onClick={() => {
@@ -268,7 +294,6 @@ export default function ScheduleTimeline() {
         </div>
       </div>
 
-      {/* Modal for add/update */}
       {showScheduleModal && (
         <ScheduleModal
           isOpen={showScheduleModal}
@@ -294,7 +319,6 @@ export default function ScheduleTimeline() {
         />
       )}
 
-      {/* Delete confirmation */}
       {scheduleToDelete && (
         <ConfirmModal
           isOpen={!!scheduleToDelete}

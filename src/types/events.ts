@@ -66,3 +66,20 @@ export type EventFormData = {
   capacity: number | null;
   allow_waitlist: boolean;
 };
+
+
+export interface Schedule {
+  id: number;
+  event: number;
+  title: string;
+  agenda: string;
+  start_datetime: string;
+  end_datetime: string | null;
+}
+
+export interface ScheduleInput {
+  start_datetime: string;
+  end_datetime: string | null;
+  title: string;
+  agenda: string;
+}

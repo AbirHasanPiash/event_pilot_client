@@ -360,7 +360,9 @@ export default function AdminEventsPage() {
         <p className="text-gray-500">No events found.</p>
       ) : (
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {events.map((event) => (
+          {events.map((event) => {
+            const isEventStarted = dayjs().isAfter(dayjs(event.start_time));
+            return (
             <div
               key={event.id}
               className="border rounded-lg overflow-hidden shadow-sm bg-white dark:bg-gray-900 border-gray-200 dark:border-white/10 flex flex-col"
@@ -430,7 +432,8 @@ export default function AdminEventsPage() {
                       setEditingEvent(event);
                       setShowFormModal(true);
                     }}
-                    className="flex items-center gap-1 px-2 py-1 text-xs border border-indigo-500 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-white/10 rounded"
+                    disabled={isEventStarted}
+                    className="flex items-center gap-1 px-2 py-1 text-xs border border-indigo-500 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-white/10 rounded disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Pencil size={14} /> Edit
                   </button>
@@ -440,14 +443,16 @@ export default function AdminEventsPage() {
                       setEventToDelete(event.id);
                       setShowDeleteConfirm(true);
                     }}
-                    className="flex items-center gap-1 px-2 py-1 text-xs border border-red-500 text-red-600 hover:bg-red-50 dark:hover:bg-white/10 rounded"
+                    disabled={isEventStarted}
+                    className="flex items-center gap-1 px-2 py-1 text-xs border border-red-500 text-red-600 hover:bg-red-50 dark:hover:bg-white/10 rounded disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Trash2 size={14} /> Delete
                   </button>
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

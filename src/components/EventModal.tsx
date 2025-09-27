@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { useSafeApiFetch } from "@/lib/apiWrapper";
 import Image from "next/image";
 import { AdminEventForm } from "@/types/events";
+import dayjs from "dayjs";
 
 type ModalState = {
   id?: number | null;
@@ -105,11 +106,12 @@ export default function EventModal({
       tags: initialData?.tags ?? [],
       image: null, // file input starts empty
       start_time: initialData?.start_time
-        ? initialData.start_time.slice(0, 16)
+        ? dayjs(initialData.start_time).local().format("YYYY-MM-DDTHH:mm")
         : null,
       end_time: initialData?.end_time
-        ? initialData.end_time.slice(0, 16)
+        ? dayjs(initialData.end_time).local().format("YYYY-MM-DDTHH:mm")
         : null,
+
       venue: initialData?.venue ?? "",
       location_map_url: initialData?.location_map_url ?? "",
       visibility: initialData?.visibility ?? "public",
@@ -240,11 +242,11 @@ export default function EventModal({
         : initialData?.category ?? null,
 
       tags: form.tags,
-      image: form.image ?? null, // File or null
-      // note: these are "YYYY-MM-DDTHH:mm" (no timezone). AdminEventsPage currently forwards raw strings;
-      // if your backend requires ISO with Z, convert: new Date(form.start_time!).toISOString()
-      start_time: form.start_time ?? null,
-      end_time: form.end_time ?? null,
+      image: form.image ?? null,
+      start_time: form.start_time
+        ? new Date(form.start_time).toISOString()
+        : null,
+      end_time: form.end_time ? new Date(form.end_time).toISOString() : null,
       venue: form.venue,
       location_map_url: form.location_map_url,
       visibility: form.visibility,

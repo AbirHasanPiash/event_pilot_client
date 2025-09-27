@@ -149,7 +149,7 @@ export default function Navbar() {
 
   return (
     <header
-      className="fixed inset-x-0 top-0 z-50 border-b border-indigo-500/50 dark:border-indigo-400/40
+      className="fixed inset-x-0 top-0 z-50 border-b border-indigo-500
                  bg-white/80 dark:bg-neutral-900/80 backdrop-blur-md shadow-sm"
     >
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">

@@ -3,7 +3,7 @@ import { Github, Linkedin, Twitter } from "lucide-react";
 
 export default function Footer() {
   return (
-    <footer className="w-full border-t border-indigo-300 dark:border-t-[0.5px] bg-white dark:bg-black">
+    <footer className="w-full border-t border-indigo-500 bg-white dark:bg-black">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <div className="flex flex-col md:flex-row justify-between items-center gap-6">
           {/* Brand and Tagline */}
