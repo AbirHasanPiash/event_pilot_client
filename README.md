@@ -1,36 +1,111 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🎨 EventPilot Client
 
-## Getting Started
+EventPilot Client is the **frontend application** for the [EventPilot Backend](https://github.com/your-username/eventpilot).  
+Built with **Next.js 15**, **React 19**, and **Tailwind CSS 4**, it delivers a **modern, fast, and responsive UI** for managing and browsing events.
 
-First, run the development server:
+The client integrates with the EventPilot backend (Django Rest Framework + PostgreSQL) and provides role-based views for **Admins**, **Organizers**, and **Attendees**.
 
-```bash
-npm run dev
+---
+
+## 🚀 Live Demo
+
+🔗 [EventPilot Client](https://eventpilot-pearl.vercel.app/)  
+
+---
+
+## ✨ Features
+
+- **🔑 Authentication**
+  - JWT-based login, registration, and email activation
+  - Role-specific dashboards and access
+
+- **📊 Dashboards**
+  - Admin & Organizer dashboards with charts (**Recharts**)
+  - Real-time analytics
+
+- **📅 Event Management**
+  - Browse upcoming events
+  - React (attend, like, bookmark)
+  - Organizers can **create, update, delete** events
+
+- **🛠 User Experience**
+  - Responsive UI (**Tailwind CSS 4**)
+  - Smooth animations (**Framer Motion**)
+  - Light/Dark theme toggle (**next-themes**)
+  - Interactive components (**Radix UI**)
+
+- **👨‍💻 Developer Experience**
+  - Data fetching with **SWR**
+  - Forms with **React Hook Form**
+  - Notifications with **React Hot Toast**
+  - Modular component system (inspired by **shadcn/ui**)
+
+---
+
+## 🛠 Tech Stack
+
+| Category       | Technologies |
+|----------------|--------------|
+| **Framework**  | Next.js 15 (App Router, Turbopack) |
+| **UI & Styling** | Tailwind CSS 4, Radix UI, Framer Motion |
+| **Data & State** | SWR, React Hook Form, JWT |
+| **Charts**     | Recharts |
+| **Icons**      | Lucide React |
+| **Utilities**  | clsx, tailwind-merge, class-variance-authority |
+
+---
+
+## ⚙️ Installation & Setup
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/your-username/event_pilot_client.git
+   cd event_pilot_client
+Install dependencies
+
+bash
+Copy code
+npm install
 # or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+yarn install
+Set up environment variables
+Create a .env.local file in the root directory:
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## env
+NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
+NEXT_PUBLIC_APP_NAME=EventPilot
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 🔑 Authentication
+JWT-based login & registration (via Djoser)
 
-## Learn More
+Tokens stored securely and attached to API requests
 
-To learn more about Next.js, take a look at the following resources:
+Role-based rendering for Admin, Organizer, and Attendee
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 📘 API Integration
+This client consumes the EventPilot Backend REST API.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Key Integrations:
 
-## Deploy on Vercel
+Auth: JWT endpoints from Djoser
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Events: Browse & react, full CRUD for organizers/admins
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Dashboards: Charts and analytics for admins/organizers
+
+## 🤝 Contributing
+Contributions are welcome! 🎉
+
+Fork the repo
+
+Create a feature branch
+
+Submit a pull request 🚀
+
+## 📜 License
+This project is licensed under the MIT License.
+
+## 📧 Contact
+For support or inquiries, reach out:
+📩 abirhasanpiash@gmail.com
