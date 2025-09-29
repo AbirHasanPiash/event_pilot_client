@@ -1,6 +1,6 @@
 # 🎨 EventPilot Client
 
-EventPilot Client is the **frontend application** for the [EventPilot Backend](https://github.com/your-username/eventpilot).  
+EventPilot Client is the **frontend application** for the [EventPilot Backend](https://github.com/AbirHasanPiash/EventPilot).  
 Built with **Next.js 15**, **React 19**, and **Tailwind CSS 4**, it delivers a **modern, fast, and responsive UI** for managing and browsing events.
 
 The client integrates with the EventPilot backend (Django Rest Framework + PostgreSQL) and provides role-based views for **Admins**, **Organizers**, and **Attendees**.
@@ -73,26 +73,23 @@ Create a .env.local file in the root directory:
 
 ## env
 NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
-NEXT_PUBLIC_APP_NAME=EventPilot
 
 
 ## 🔑 Authentication
-JWT-based login & registration (via Djoser)
-
-Tokens stored securely and attached to API requests
-
-Role-based rendering for Admin, Organizer, and Attendee
+- JWT-based login & registration (via Djoser)
+- Tokens stored securely and attached to API requests
+- Role-based rendering for Admin, Organizer, and Attendee
 
 ## 📘 API Integration
-This client consumes the EventPilot Backend REST API.
+- This client consumes the EventPilot Backend REST API.
 
-Key Integrations:
+# Key Integrations:
 
-Auth: JWT endpoints from Djoser
+- Auth: JWT endpoints from Djoser
 
-Events: Browse & react, full CRUD for organizers/admins
+- Events: Browse & react, full CRUD for organizers/admins
 
-Dashboards: Charts and analytics for admins/organizers
+- Dashboards: Charts and analytics for admins/organizers
 
 ## 🤝 Contributing
 Contributions are welcome! 🎉
