@@ -19,27 +19,36 @@ const inter = Inter({
 // --- SEO & Metadata ---
 export const metadata: Metadata = {
   title: {
-    default: "Event Management",
-    template: "%s | Event Management",
+    default: "EventPilot",
+    template: "%s | EventPilot",
   },
   description: "A modern event management platform built with Next.js",
-  metadataBase: new URL("https://yourdomain.com"),
-  keywords: ["Next.js", "Event", "Management", "Booking", "Platform"],
-  authors: [{ name: "Your Name", url: "https://yourwebsite.com" }],
+  metadataBase: new URL("https://eventpilot-pearl.vercel.app/"),
+  keywords: ["Next.js", "Event", "Management", "Booking", "Platform", "React", "django", "Abir Hasan Piash", "a_h_Piash"],
+  authors: [{ name: "MD. ABIR HASAN PIASH", url: "https://ahpiashportfolio.vercel.app/" }],
   creator: "Your Name",
   openGraph: {
-    title: "Event Management",
+    title: "EventPilot - Event Management",
     description: "Plan, book, and manage your events effortlessly.",
-    url: "https://yourdomain.com",
-    siteName: "Event Management",
+    url: "https://eventpilot-pearl.vercel.app/",
+    siteName: "EventPilot",
+    images: [
+      {
+        url: "https://eventpilot-pearl.vercel.app/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "EventPilot",
+      },
+    ],
     locale: "en_US",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Event Management",
+    title: "EventPilot - Event Management",
     description: "Plan, book, and manage your events effortlessly.",
     creator: "@yourhandle",
+    images: ["https://eventpilot-pearl.vercel.app/og-image.png"],
   },
 };
 
