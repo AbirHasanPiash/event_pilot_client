@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Github, Linkedin, Twitter } from "lucide-react";
+import { Github, Linkedin, X } from "lucide-react";
 
 export default function Footer() {
   return (
@@ -22,14 +22,14 @@ export default function Footer() {
 
           {/* Social Icons */}
           <div className="flex gap-4 text-gray-600 dark:text-gray-400">
-            <SocialIcon href="https://github.com/yourusername">
+            <SocialIcon href="https://github.com/AbirHasanPiash">
               <Github size={20} />
             </SocialIcon>
-            <SocialIcon href="https://linkedin.com/in/yourprofile">
+            <SocialIcon href="https://www.linkedin.com/in/a-h-piash/">
               <Linkedin size={20} />
             </SocialIcon>
             <SocialIcon href="https://twitter.com/yourhandle">
-              <Twitter size={20} />
+              <X size={20} />
             </SocialIcon>
           </div>
         </div>
